@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/go-gl/glfw/v3.3/glfw v0.0.0-20210727001814-0db043d8d5be // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/hajimehoshi/ebiten/v2 v2.2.4 // indirect
 	github.com/jezek/xgb v0.0.0-20210312150743-0e0f116e1240 // indirect
 	golang.org/x/exp v0.0.0-20190731235908-ec7cb31e5a56 // indirect
