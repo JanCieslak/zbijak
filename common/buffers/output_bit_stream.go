@@ -2,7 +2,6 @@ package buffers
 
 import (
 	"constraints"
-	"reflect"
 )
 
 type OutputBitStream struct {
@@ -24,18 +23,22 @@ func (s *OutputBitStream) Reallocate(newSize int) {
 }
 
 func (s *OutputBitStream) Write(data interface{}) {
-	dataType := reflect.TypeOf(data).Kind()
-
 	// TODO signed types ? bool type, enum types ?
-
-	if dataType == reflect.Uint8 {
-		writeBits(s, data.(uint8), 8)
-	} else if dataType == reflect.Uint16 {
-		writeNBytes(s, data.(uint16), 2)
-	} else if dataType == reflect.Uint32 {
-		writeNBytes(s, data.(uint32), 4)
-	} else if dataType == reflect.Uint64 {
-		writeNBytes(s, data.(uint64), 8)
+	switch data := data.(type) {
+	case uint8:
+		writeBits(s, data, 8)
+		break
+	case uint16:
+		writeNBytes(s, data, 2)
+		break
+	case uint32:
+		writeNBytes(s, data, 4)
+		break
+	case uint64:
+		writeNBytes(s, data, 8)
+		break
+	default:
+		break
 	}
 }
 

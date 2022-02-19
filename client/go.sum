@@ -1,4 +1,6 @@
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
+github.com/JanCieslak/zbijak/common v0.0.0-20220219130121-a4850142f605 h1:XGn3XGEfXclYp24WFZVjFv1qPRFZVVIoRoUXp14jISU=
+github.com/JanCieslak/zbijak/common v0.0.0-20220219130121-a4850142f605/go.mod h1:ojHjmQs8/a1y07rzfypWgzBTRs2fQ8I/XLAGB/SXdSU=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20210727001814-0db043d8d5be h1:vEIVIuBApEBQTEJt19GfhoU+zFSV+sNTa9E9FdnRYfk=
 github.com/go-gl/glfw/v3.3/glfw v0.0.0-20210727001814-0db043d8d5be/go.mod h1:tQ2UAYgL5IevRw8kRxooKSPJfGvJ9fJQFa0TUsXzTg8=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
