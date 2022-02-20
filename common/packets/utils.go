@@ -2,7 +2,9 @@ package packets
 
 import (
 	"encoding/binary"
+	"github.com/JanCieslak/zbijak/common"
 	"log"
+	"math"
 	"net"
 )
 
@@ -25,8 +27,47 @@ type WelcomePacket struct {
 	Addr     *net.UDPAddr
 }
 
-type PlayerUpdatePacket struct {
-	X, Y float64
+//type PlayerUpdatePacket struct {
+//	ClientId uint8
+//	X, Y     float64
+//}
+//
+//type ServerUpdatePacket struct {
+//	ClientId uint8
+//	X, Y     float64
+//}
+
+func ParsePlayerUpdatePacket(buffer []byte) common.RemotePlayer {
+	log.Println("Received Player update packet")
+	clientId := buffer[1]
+	xBits := binary.BigEndian.Uint64(buffer[2:10])
+	yBits := binary.BigEndian.Uint64(buffer[10:18])
+	return common.RemotePlayer{
+		ClientId: clientId,
+		X:        float64(xBits),
+		Y:        float64(yBits),
+	}
+}
+
+func ParseServerUpdatePacket(buffer []byte) []common.RemotePlayer {
+	playersCount := buffer[0]
+	log.Println("SERVER UPDATE COUNT", playersCount)
+	players := make([]common.RemotePlayer, playersCount)
+	for i := 0; i < int(playersCount); i++ {
+		bufferIndex := i + 1
+		clientId := buffer[bufferIndex+1]
+		xBits := binary.BigEndian.Uint64(buffer[bufferIndex+2 : bufferIndex+10])
+		x := math.Float64frombits(xBits)
+		yBits := binary.BigEndian.Uint64(buffer[bufferIndex+10 : bufferIndex+18])
+		y := math.Float64frombits(yBits)
+		bufferIndex += 17
+		players[i] = common.RemotePlayer{
+			ClientId: clientId,
+			X:        x,
+			Y:        y,
+		}
+	}
+	return players
 }
 
 func SendHelloPacket(conn *net.UDPConn, addr *net.UDPAddr) {
@@ -45,12 +86,34 @@ func SendWelcomePacket(conn *net.UDPConn, addr *net.UDPAddr, clientSocketAddr st
 	})
 }
 
-func SendPlayerUpdatePacket(conn *net.UDPConn, addr *net.UDPAddr, x, y float64) {
-	buffer := make([]byte, 16)
-	binary.BigEndian.PutUint64(buffer, uint64(x))
-	binary.BigEndian.PutUint64(buffer, uint64(y))
+func SendPlayerUpdatePacket(conn *net.UDPConn, addr *net.UDPAddr, clientId uint8, x, y float64) {
+	buffer := make([]byte, 17)
+	buffer[0] = clientId
+	binary.BigEndian.PutUint64(buffer[1:9], math.Float64bits(x))
+	binary.BigEndian.PutUint64(buffer[9:17], math.Float64bits(y))
 	sendPacket(conn, addr, Packet{
 		Kind: PlayerUpdate,
+		Data: buffer,
+	})
+}
+
+func SendServerUpdatePacket(conn *net.UDPConn, addr *net.UDPAddr, players []common.RemotePlayer) {
+	buffer := make([]byte, 0)
+	buffer = append(buffer, uint8(len(players)))
+	for _, player := range players {
+		buffer = append(buffer, player.ClientId)
+
+		xBuffer := make([]byte, 8)
+		binary.BigEndian.PutUint64(xBuffer[:], math.Float64bits(player.X))
+
+		yBuffer := make([]byte, 8)
+		binary.BigEndian.PutUint64(yBuffer[:], math.Float64bits(player.Y))
+
+		buffer = append(buffer, xBuffer...)
+		buffer = append(buffer, yBuffer...)
+	}
+	sendPacket(conn, addr, Packet{
+		Kind: ServerUpdate,
 		Data: buffer,
 	})
 }
@@ -91,14 +154,14 @@ func ReceiveWelcomePacket(client bool, conn *net.UDPConn) WelcomePacket {
 	}
 }
 
-func ReceivePlayerUpdatePacket(client bool, conn *net.UDPConn) PlayerUpdatePacket {
-	packet := receivePacket(client, conn, 18)
-	xBits := binary.BigEndian.Uint64(packet.Data[1:9])
-	yBits := binary.BigEndian.Uint64(packet.Data[9:17])
-	return PlayerUpdatePacket{
-		X: float64(xBits),
-		Y: float64(yBits),
-	}
+func ReceivePlayerUpdatePacket(client bool, conn *net.UDPConn) common.RemotePlayer {
+	packet := receivePacket(client, conn, 19)
+	return ParsePlayerUpdatePacket(packet.Data)
+}
+
+func ReceiveServerUpdatePacket(conn *net.UDPConn) []common.RemotePlayer {
+	packet := receivePacket(true, conn, 256)
+	return ParseServerUpdatePacket(packet.Data)
 }
 
 func receivePacket(client bool, conn *net.UDPConn, bufSize uint) Packet {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -10,6 +9,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"sync"
 )
 
 const (
@@ -21,17 +21,38 @@ type Player struct {
 	x, y float64
 }
 
+type GhostPlayer struct {
+	x, y float64
+}
+
 type Game struct {
-	id     uint8
-	player Player
-	conn   *net.UDPConn
-	buffer *bytes.Buffer
+	id          uint8
+	player      Player
+	conn        *net.UDPConn
+	playersLock sync.Mutex
+	players     map[uint8]*GhostPlayer
 }
 
 func (g *Game) Update() error {
-	g.buffer.Reset()
+	g.playersLock.Lock()
+	ghostPlayers := packets.ReceiveServerUpdatePacket(g.conn)
+	log.Println("GHOST PLAYERS", ghostPlayers)
+	for i, ghostPlayer := range ghostPlayers {
+		log.Println(i, "GHOST PLAYER", ghostPlayer)
+		if g.players[ghostPlayer.ClientId] == nil {
+			g.players[ghostPlayer.ClientId] = &GhostPlayer{
+				x: ghostPlayer.X,
+				y: ghostPlayer.Y,
+			}
+			continue
+		}
+		player := g.players[ghostPlayer.ClientId]
+		player.x = ghostPlayer.X
+		player.y = ghostPlayer.Y
+	}
+	g.playersLock.Unlock()
 
-	speed := 3.0
+	speed := 10.0
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
 		g.player.x -= speed
@@ -46,7 +67,7 @@ func (g *Game) Update() error {
 		g.player.y += speed
 	}
 
-	packets.SendPlayerUpdatePacket(g.conn, nil, g.player.x, g.player.y)
+	packets.SendPlayerUpdatePacket(g.conn, nil, g.id, g.player.x, g.player.y)
 
 	return nil
 }
@@ -54,6 +75,13 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.Black)
 	ebitenutil.DrawRect(screen, g.player.x, g.player.y, 30, 30, color.White)
+	log.Println("Drawing player at", g.player.x, g.player.y)
+	g.playersLock.Lock()
+	for i, player := range g.players {
+		log.Println("Drawing ghost player ", i, "at", player.x, player.y)
+		ebitenutil.DrawRect(screen, player.x, player.y, 30, 30, color.White)
+	}
+	g.playersLock.Unlock()
 	ebitenutil.DebugPrint(screen, "Fps: "+strconv.FormatFloat(ebiten.CurrentFPS(), 'f', 2, 64))
 }
 
@@ -82,8 +110,9 @@ func main() {
 			x: 250,
 			y: 250,
 		},
-		buffer: bytes.NewBuffer(make([]byte, 32)),
-		conn:   conn,
+		conn:        conn,
+		players:     make(map[uint8]*GhostPlayer),
+		playersLock: sync.Mutex{},
 	}
 
 	log.Println("Player id assigned:", game.id)
@@ -92,7 +121,7 @@ func main() {
 	ebiten.SetWindowResizable(true)
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(144)
+	ebiten.SetMaxTPS(1)
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalln(err)
