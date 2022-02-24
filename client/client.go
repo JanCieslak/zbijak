@@ -22,16 +22,16 @@ type Player struct {
 	x, y float64
 }
 
-type GhostPlayer struct {
+type RemotePlayer struct {
 	x, y float64
 }
 
 type Game struct {
-	id               uint8
-	player           *Player
-	conn             *net.UDPConn
-	remotePlayerLock sync.Mutex
-	remotePlayer     *GhostPlayer
+	id     uint8
+	player *Player
+	conn   *net.UDPConn
+	//remotePlayerLock sync.Mutex
+	remotePlayers sync.Map
 }
 
 func (g *Game) Update() error {
@@ -67,9 +67,14 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.Black)
 	ebitenutil.DrawRect(screen, g.player.x, g.player.y, 30, 30, color.White)
 
-	g.remotePlayerLock.Lock()
-	ebitenutil.DrawRect(screen, g.remotePlayer.x+100, g.remotePlayer.y, 30, 30, color.RGBA{R: 255, G: 0, B: 0, A: 255})
-	g.remotePlayerLock.Unlock()
+	g.remotePlayers.Range(func(key, value any) bool {
+		clientId := key.(uint8)
+		remotePlayer := value.(*RemotePlayer)
+		if clientId != g.id {
+			ebitenutil.DrawRect(screen, remotePlayer.x, remotePlayer.y, 30, 30, color.RGBA{R: 100, G: 0, B: 0, A: 255})
+		}
+		return true
+	})
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -101,12 +106,8 @@ func main() {
 			x: 250,
 			y: 250,
 		},
-		conn:             conn,
-		remotePlayerLock: sync.Mutex{},
-		remotePlayer: &GhostPlayer{
-			x: 0,
-			y: 0,
-		},
+		conn:          conn,
+		remotePlayers: sync.Map{},
 	}
 
 	ebiten.SetWindowTitle("Zbijak")
@@ -126,10 +127,12 @@ func main() {
 			log.Println("Received:", serverUpdatePacket)
 			serverUpdateData := serverUpdatePacket.Data
 
-			game.remotePlayerLock.Lock()
-			game.remotePlayer.x = serverUpdateData.PlayersData[0].X
-			game.remotePlayer.y = serverUpdateData.PlayersData[0].Y
-			game.remotePlayerLock.Unlock()
+			for _, player := range serverUpdateData.PlayersData {
+				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
+					x: player.X,
+					y: player.Y,
+				})
+			}
 		}
 	}()
 
