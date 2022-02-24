@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"github.com/JanCieslak/zbijak/common/packets"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -10,17 +11,19 @@ import (
 
 type Server struct {
 	players sync.Map
-	player  *RemotePlayer
+	//player  *RemotePlayer
 }
 
 type RemotePlayer struct {
-	addr *net.Addr
+	addr net.Addr
 	x, y float64
 }
 
 func main() {
 	log.SetPrefix("Server - ")
+	log.SetOutput(ioutil.Discard)
 
+	// TODO Changge to UDPConn (it implements ListenPacket)
 	packetConn, err := net.ListenPacket("udp", ":8083")
 	if err != nil {
 		log.Fatalln("PacketConn error", err)
@@ -30,12 +33,39 @@ func main() {
 
 	s := Server{
 		players: sync.Map{},
-		player: &RemotePlayer{
-			addr: nil,
-			x:    0,
-			y:    0,
-		},
 	}
+
+	go func() {
+		for {
+			players := make([]packets.PlayerData, 0)
+			s.players.Range(func(key, value any) bool {
+				player := value.(*RemotePlayer)
+
+				players = append(players, packets.PlayerData{
+					ClientId: key.(uint8),
+					X:        player.x,
+					Y:        player.y,
+				})
+
+				return true
+			})
+
+			if len(players) > 0 {
+				s.players.Range(func(key, value any) bool {
+					player := value.(*RemotePlayer)
+
+					var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
+					serverUpdatePacket.Kind = packets.ServerUpdate
+					serverUpdatePacket.Data = packets.ServerUpdateData{
+						PlayersData: players,
+					}
+					log.Println("Sending server update with players:", players)
+					packets.SendPacketTo(packetConn, player.addr, packets.Serialize(serverUpdatePacket))
+					return true
+				})
+			}
+		}
+	}()
 
 	for {
 		remoteAddr, buffer := packets.ReceivePacketWithAddr(packetConn)
@@ -48,7 +78,6 @@ func main() {
 
 		switch packet.Kind {
 		case packets.PlayerUpdate:
-			// Receive
 			var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
 			err = json.Unmarshal(buffer, &playerUpdatePacket)
 			if err != nil {
@@ -56,24 +85,11 @@ func main() {
 			}
 			playerUpdateData := playerUpdatePacket.Data
 
-			s.player.addr = &remoteAddr
-			s.player.x = playerUpdateData.X
-			s.player.y = playerUpdateData.Y
-
-			// Send
-			players := make([]packets.PlayerData, 0)
-			players = append(players, packets.PlayerData{
-				ClientId: playerUpdateData.ClientId,
-				X:        playerUpdateData.X,
-				Y:        playerUpdateData.Y,
+			s.players.Store(playerUpdateData.ClientId, &RemotePlayer{
+				addr: remoteAddr,
+				x:    playerUpdateData.X,
+				y:    playerUpdateData.Y,
 			})
-			var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
-			serverUpdatePacket.Kind = packets.ServerUpdate
-			serverUpdatePacket.Data = packets.ServerUpdateData{
-				PlayersData: players,
-			}
-			packets.SendPacketTo(packetConn, remoteAddr, packets.Serialize(serverUpdatePacket))
-
 			break
 		default:
 			log.Fatalln("Something went wrong")

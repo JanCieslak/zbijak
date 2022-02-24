@@ -7,6 +7,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"image/color"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -59,20 +60,6 @@ func (g *Game) Update() error {
 		g.player.y += speed
 	}
 
-	bytes := packets.ReceivePacket(true, g.conn)
-	var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
-	err := json.Unmarshal(bytes, &serverUpdatePacket)
-	if err != nil {
-		log.Fatalln("Error when deserializing packet")
-	}
-	log.Println("Received:", serverUpdatePacket)
-	serverUpdateData := serverUpdatePacket.Data
-
-	g.remotePlayerLock.Lock()
-	g.remotePlayer.x = serverUpdateData.PlayersData[0].X
-	g.remotePlayer.y = serverUpdateData.PlayersData[0].Y
-	g.remotePlayerLock.Unlock()
-
 	return nil
 }
 
@@ -94,6 +81,7 @@ func main() {
 	flag.Parse()
 
 	log.SetPrefix("Client - ")
+	log.SetOutput(ioutil.Discard)
 
 	serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
 	if err != nil {
@@ -126,6 +114,24 @@ func main() {
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
 	ebiten.SetMaxTPS(144)
+
+	go func() {
+		for {
+			bytes := packets.ReceivePacket(true, game.conn)
+			var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
+			err := json.Unmarshal(bytes, &serverUpdatePacket)
+			if err != nil {
+				log.Fatalln("Error when deserializing packet")
+			}
+			log.Println("Received:", serverUpdatePacket)
+			serverUpdateData := serverUpdatePacket.Data
+
+			game.remotePlayerLock.Lock()
+			game.remotePlayer.x = serverUpdateData.PlayersData[0].X
+			game.remotePlayer.y = serverUpdateData.PlayersData[0].Y
+			game.remotePlayerLock.Unlock()
+		}
+	}()
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalln(err)
