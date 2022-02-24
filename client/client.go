@@ -1,14 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"image/color"
-	_ "image/png"
 	"log"
 	"net"
-	"strconv"
 	"sync"
 )
 
@@ -26,31 +25,23 @@ type GhostPlayer struct {
 }
 
 type Game struct {
-	id          uint8
-	player      Player
-	conn        *net.UDPConn
-	playersLock sync.Mutex
-	players     map[uint8]*GhostPlayer
+	id               uint8
+	player           *Player
+	conn             *net.UDPConn
+	remotePlayerLock sync.Mutex
+	remotePlayer     *GhostPlayer
 }
 
 func (g *Game) Update() error {
-	g.playersLock.Lock()
-	ghostPlayers := packets.ReceiveServerUpdatePacket(g.conn)
-	log.Println("GHOST PLAYERS", ghostPlayers)
-	for i, ghostPlayer := range ghostPlayers {
-		log.Println(i, "GHOST PLAYER", ghostPlayer)
-		if g.players[ghostPlayer.ClientId] == nil {
-			g.players[ghostPlayer.ClientId] = &GhostPlayer{
-				x: ghostPlayer.X,
-				y: ghostPlayer.Y,
-			}
-			continue
-		}
-		player := g.players[ghostPlayer.ClientId]
-		player.x = ghostPlayer.X
-		player.y = ghostPlayer.Y
+	var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
+	playerUpdatePacket.Kind = packets.PlayerUpdate
+	playerUpdatePacket.Data = packets.PlayerUpdateData{
+		ClientId: g.id,
+		X:        g.player.x,
+		Y:        g.player.y,
 	}
-	g.playersLock.Unlock()
+	log.Println("Sending:", playerUpdatePacket)
+	packets.SendPacket(g.conn, nil, packets.Serialize(playerUpdatePacket))
 
 	speed := 10.0
 
@@ -67,7 +58,19 @@ func (g *Game) Update() error {
 		g.player.y += speed
 	}
 
-	packets.SendPlayerUpdatePacket(g.conn, nil, g.id, g.player.x, g.player.y)
+	bytes := packets.ReceivePacket(true, g.conn)
+	var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
+	err := json.Unmarshal(bytes, &serverUpdatePacket)
+	if err != nil {
+		log.Fatalln("Error when deserializing packet")
+	}
+	log.Println("Received:", serverUpdatePacket)
+	serverUpdateData := serverUpdatePacket.Data
+
+	g.remotePlayerLock.Lock()
+	g.remotePlayer.x = serverUpdateData.PlayersData[0].X
+	g.remotePlayer.y = serverUpdateData.PlayersData[0].Y
+	g.remotePlayerLock.Unlock()
 
 	return nil
 }
@@ -75,14 +78,10 @@ func (g *Game) Update() error {
 func (g *Game) Draw(screen *ebiten.Image) {
 	screen.Fill(color.Black)
 	ebitenutil.DrawRect(screen, g.player.x, g.player.y, 30, 30, color.White)
-	log.Println("Drawing player at", g.player.x, g.player.y)
-	g.playersLock.Lock()
-	for i, player := range g.players {
-		log.Println("Drawing ghost player ", i, "at", player.x, player.y)
-		ebitenutil.DrawRect(screen, player.x, player.y, 30, 30, color.White)
-	}
-	g.playersLock.Unlock()
-	ebitenutil.DebugPrint(screen, "Fps: "+strconv.FormatFloat(ebiten.CurrentFPS(), 'f', 2, 64))
+
+	g.remotePlayerLock.Lock()
+	ebitenutil.DrawRect(screen, g.remotePlayer.x+100, g.remotePlayer.y, 30, 30, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+	g.remotePlayerLock.Unlock()
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
@@ -102,40 +101,27 @@ func main() {
 		log.Fatalln("Dial creation:", err)
 	}
 
-	_, id := connect(conn)
-
 	game := &Game{
-		id: id,
-		player: Player{
+		id: 0,
+		player: &Player{
 			x: 250,
 			y: 250,
 		},
-		conn:        conn,
-		players:     make(map[uint8]*GhostPlayer),
-		playersLock: sync.Mutex{},
+		conn:             conn,
+		remotePlayerLock: sync.Mutex{},
+		remotePlayer: &GhostPlayer{
+			x: 0,
+			y: 0,
+		},
 	}
-
-	log.Println("Player id assigned:", game.id)
 
 	ebiten.SetWindowTitle("Zbijak")
 	ebiten.SetWindowResizable(true)
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(1)
+	ebiten.SetMaxTPS(144)
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalln(err)
 	}
-
-	err = conn.Close()
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
-
-func connect(conn *net.UDPConn) (*net.UDPConn, uint8) {
-	packets.SendHelloPacket(conn, nil)
-	welcomePacket := packets.ReceiveWelcomePacket(false, conn)
-
-	return conn, welcomePacket.ClientId
 }

@@ -1,6 +1,6 @@
 module github.com/JanCieslak/zbijak/server
 
-go 1.16
+go 1.18
 
 replace (
 	github.com/JanCieslak/zbijak/common => ../common
