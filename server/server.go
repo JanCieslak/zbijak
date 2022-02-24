@@ -5,25 +5,40 @@ import (
 	"github.com/JanCieslak/zbijak/common/packets"
 	"log"
 	"net"
+	"sync"
 )
+
+type Server struct {
+	players sync.Map
+	player  *RemotePlayer
+}
+
+type RemotePlayer struct {
+	addr *net.Addr
+	x, y float64
+}
 
 func main() {
 	log.SetPrefix("Server - ")
 
-	addr, err := net.ResolveUDPAddr("udp", ":8083")
+	packetConn, err := net.ListenPacket("udp", ":8083")
 	if err != nil {
-		log.Fatalln("Resolve Addr error:", err)
+		log.Fatalln("PacketConn error", err)
 	}
 
-	conn, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		log.Fatalln(err)
-	}
+	log.Println("Listening on: 8083")
 
-	log.Println("Listening on:", addr)
+	s := Server{
+		players: sync.Map{},
+		player: &RemotePlayer{
+			addr: nil,
+			x:    0,
+			y:    0,
+		},
+	}
 
 	for {
-		remoteAddr, buffer := packets.ReceivePacketWithAddr(false, conn)
+		remoteAddr, buffer := packets.ReceivePacketWithAddr(packetConn)
 
 		var packet packets.Packet[any]
 		err = json.Unmarshal(buffer, &packet)
@@ -33,6 +48,7 @@ func main() {
 
 		switch packet.Kind {
 		case packets.PlayerUpdate:
+			// Receive
 			var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
 			err = json.Unmarshal(buffer, &playerUpdatePacket)
 			if err != nil {
@@ -40,6 +56,11 @@ func main() {
 			}
 			playerUpdateData := playerUpdatePacket.Data
 
+			s.player.addr = &remoteAddr
+			s.player.x = playerUpdateData.X
+			s.player.y = playerUpdateData.Y
+
+			// Send
 			players := make([]packets.PlayerData, 0)
 			players = append(players, packets.PlayerData{
 				ClientId: playerUpdateData.ClientId,
@@ -51,7 +72,7 @@ func main() {
 			serverUpdatePacket.Data = packets.ServerUpdateData{
 				PlayersData: players,
 			}
-			packets.SendPacket(conn, remoteAddr, packets.Serialize(serverUpdatePacket))
+			packets.SendPacketTo(packetConn, remoteAddr, packets.Serialize(serverUpdatePacket))
 
 			break
 		default:

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -89,6 +90,9 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
+	id := flag.Int("id", 0, "Client id")
+	flag.Parse()
+
 	log.SetPrefix("Client - ")
 
 	serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
@@ -101,8 +105,10 @@ func main() {
 		log.Fatalln("Dial creation:", err)
 	}
 
+	log.Println("Client id", *id)
+
 	game := &Game{
-		id: 0,
+		id: uint8(*id),
 		player: &Player{
 			x: 250,
 			y: 250,

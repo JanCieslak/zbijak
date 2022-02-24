@@ -41,6 +41,32 @@ type ServerUpdateData struct {
 	PlayersData []PlayerData
 }
 
+func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
+	buffer := make([]byte, 512)
+
+	log.Printf("[%v] Receiving packet...", conn.LocalAddr())
+	_, addr, err := conn.ReadFrom(buffer)
+	if err != nil {
+		log.Fatalln("Error when reading packet:", err)
+	}
+
+	dataLen := binary.BigEndian.Uint16(buffer[0:])
+	return addr, buffer[2 : dataLen+2]
+}
+
+func SendPacketTo(conn net.PacketConn, toAddr net.Addr, data []byte) {
+	buffer := make([]byte, 2)
+	dataLen := uint16(len(data))
+	binary.BigEndian.PutUint16(buffer, dataLen)
+
+	buffer = append(buffer, data...)
+
+	_, err := conn.WriteTo(buffer, toAddr)
+	if err != nil {
+		log.Fatalf("Sending packet to %v error: %v", toAddr, err)
+	}
+}
+
 func SendPacket(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
 	buffer := make([]byte, 2)
 	dataLen := uint16(len(data))
@@ -59,28 +85,6 @@ func SendPacket(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
 			log.Fatalln("Sending packet (nil) error:", err)
 		}
 	}
-}
-
-func ReceivePacketWithAddr(client bool, conn *net.UDPConn) (*net.UDPAddr, []byte) {
-	buffer := make([]byte, 512)
-
-	log.Printf("[%v] Receiving packet...", conn.LocalAddr())
-	var addr *net.UDPAddr
-	if client {
-		_, err := conn.Read(buffer)
-		if err != nil {
-			log.Fatalln("Receive Packet Client error:", err)
-		}
-	} else {
-		_, ra, err := conn.ReadFromUDP(buffer)
-		addr = ra
-		if err != nil {
-			log.Fatalln("Receive Packet Server error:", err)
-		}
-	}
-
-	dataLen := binary.BigEndian.Uint16(buffer[0:])
-	return addr, buffer[2 : dataLen+2]
 }
 
 func ReceivePacket(client bool, conn *net.UDPConn) []byte {
