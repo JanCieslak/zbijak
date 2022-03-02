@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
+	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -27,10 +27,9 @@ type RemotePlayer struct {
 }
 
 type Game struct {
-	id     uint8
-	player *Player
-	conn   *net.UDPConn
-	//remotePlayerLock sync.Mutex
+	id            uint8
+	player        *Player
+	conn          *net.UDPConn
 	remotePlayers sync.Map
 }
 
@@ -82,9 +81,6 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 }
 
 func main() {
-	id := flag.Int("id", 0, "Client id")
-	flag.Parse()
-
 	log.SetPrefix("Client - ")
 	log.SetOutput(ioutil.Discard)
 
@@ -98,10 +94,24 @@ func main() {
 		log.Fatalln("Dial creation:", err)
 	}
 
-	log.Println("Client id", *id)
+	var helloPacket packets.Packet[packets.HelloPacketData]
+	helloPacket.Kind = packets.Hello
+	helloPacket.Data = packets.HelloPacketData{}
+	packets.SendPacket(conn, nil, packets.Serialize(helloPacket))
+
+	bytes := packets.ReceivePacket(true, conn)
+	var serverUpdatePacket packets.Packet[packets.WelcomePacketData]
+	err = json.Unmarshal(bytes, &serverUpdatePacket)
+	if err != nil {
+		log.Fatalln("Error when deserializing packet")
+	}
+	welcomePacket := serverUpdatePacket.Data
+
+	log.Println("Client id", welcomePacket.ClientId)
+	fmt.Println("Client id", welcomePacket.ClientId)
 
 	game := &Game{
-		id: uint8(*id),
+		id: welcomePacket.ClientId,
 		player: &Player{
 			x: 250,
 			y: 250,

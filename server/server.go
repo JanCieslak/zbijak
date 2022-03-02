@@ -2,16 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
-	"io/ioutil"
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 type Server struct {
-	players sync.Map
-	//player  *RemotePlayer
+	players      sync.Map
+	nextClientId uint32
 }
 
 type RemotePlayer struct {
@@ -21,7 +22,7 @@ type RemotePlayer struct {
 
 func main() {
 	log.SetPrefix("Server - ")
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 
 	// TODO Changge to UDPConn (it implements ListenPacket)
 	packetConn, err := net.ListenPacket("udp", ":8083")
@@ -32,7 +33,8 @@ func main() {
 	log.Println("Listening on: 8083")
 
 	s := Server{
-		players: sync.Map{},
+		players:      sync.Map{},
+		nextClientId: 0,
 	}
 
 	go func() {
@@ -76,7 +78,20 @@ func main() {
 			log.Fatalln("Error when deserializing packet")
 		}
 
+		fmt.Println("Packet of type ", packet.Kind)
+
 		switch packet.Kind {
+		case packets.Hello:
+			var welcomePacket packets.Packet[packets.WelcomePacketData]
+			welcomePacket.Kind = packets.ServerUpdate
+			welcomePacket.Data = packets.WelcomePacketData{
+				ClientId: uint8(s.nextClientId),
+			}
+			fmt.Println("Id: ", s.nextClientId)
+			atomic.AddUint32(&s.nextClientId, 1)
+			fmt.Println("Id after: ", s.nextClientId)
+			packets.SendPacketTo(packetConn, remoteAddr, packets.Serialize(welcomePacket))
+			break
 		case packets.PlayerUpdate:
 			var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
 			err = json.Unmarshal(buffer, &playerUpdatePacket)
