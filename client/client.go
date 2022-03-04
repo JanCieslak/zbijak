@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -34,15 +32,11 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
-	playerUpdatePacket.Kind = packets.PlayerUpdate
-	playerUpdatePacket.Data = packets.PlayerUpdateData{
+	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
 		X:        g.player.x,
 		Y:        g.player.y,
-	}
-	log.Println("Sending:", playerUpdatePacket)
-	packets.SendPacket(g.conn, nil, packets.Serialize(playerUpdatePacket))
+	})
 
 	speed := 10.0
 
@@ -94,24 +88,16 @@ func main() {
 		log.Fatalln("Dial creation:", err)
 	}
 
-	var helloPacket packets.Packet[packets.HelloPacketData]
-	helloPacket.Kind = packets.Hello
-	helloPacket.Data = packets.HelloPacketData{}
-	packets.SendPacket(conn, nil, packets.Serialize(helloPacket))
+	packets.Send(conn, packets.Hello, packets.HelloPacketData{})
 
-	bytes := packets.ReceivePacket(true, conn)
-	var serverUpdatePacket packets.Packet[packets.WelcomePacketData]
-	err = json.Unmarshal(bytes, &serverUpdatePacket)
-	if err != nil {
-		log.Fatalln("Error when deserializing packet")
-	}
-	welcomePacket := serverUpdatePacket.Data
+	var welcomePacket packets.Packet[packets.WelcomePacketData]
+	packets.ReceivePacket(true, conn, &welcomePacket)
+	welcomePacketData := welcomePacket.Data
 
-	log.Println("Client id", welcomePacket.ClientId)
-	fmt.Println("Client id", welcomePacket.ClientId)
+	log.Println("Client id", welcomePacketData.ClientId)
 
 	game := &Game{
-		id: welcomePacket.ClientId,
+		id: welcomePacketData.ClientId,
 		player: &Player{
 			x: 250,
 			y: 250,
@@ -128,13 +114,8 @@ func main() {
 
 	go func() {
 		for {
-			bytes := packets.ReceivePacket(true, game.conn)
 			var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
-			err := json.Unmarshal(bytes, &serverUpdatePacket)
-			if err != nil {
-				log.Fatalln("Error when deserializing packet")
-			}
-			log.Println("Received:", serverUpdatePacket)
+			packets.ReceivePacket(true, game.conn, &serverUpdatePacket)
 			serverUpdateData := serverUpdatePacket.Data
 
 			for _, player := range serverUpdateData.PlayersData {

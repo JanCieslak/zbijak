@@ -16,11 +16,6 @@ const (
 	ServerUpdate
 )
 
-type Packet[T any] struct {
-	Kind PacketKind
-	Data T
-}
-
 type HelloPacketData struct{}
 
 type WelcomePacketData struct {
@@ -41,6 +36,15 @@ type ServerUpdateData struct {
 	PlayersData []PlayerData
 }
 
+type PacketData interface {
+	HelloPacketData | WelcomePacketData | PlayerUpdateData | ServerUpdateData
+}
+
+type Packet[T PacketData] struct {
+	Kind PacketKind
+	Data T
+}
+
 func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
 	buffer := make([]byte, 512)
 
@@ -54,7 +58,12 @@ func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
 	return addr, buffer[2 : dataLen+2]
 }
 
-func SendPacketTo(conn net.PacketConn, toAddr net.Addr, data []byte) {
+func SendPacketTo[T PacketData](conn net.PacketConn, toAddr net.Addr, packetKind PacketKind, packetData T) {
+	var packet Packet[T]
+	packet.Kind = packetKind
+	packet.Data = packetData
+	data := Serialize(packet)
+
 	buffer := make([]byte, 2)
 	dataLen := uint16(len(data))
 	binary.BigEndian.PutUint16(buffer, dataLen)
@@ -67,27 +76,25 @@ func SendPacketTo(conn net.PacketConn, toAddr net.Addr, data []byte) {
 	}
 }
 
-func SendPacket(conn *net.UDPConn, addr *net.UDPAddr, data []byte) {
+func Send[T PacketData](conn *net.UDPConn, packetKind PacketKind, packetData T) {
+	var packet Packet[T]
+	packet.Kind = packetKind
+	packet.Data = packetData
+	data := Serialize(packet)
+
 	buffer := make([]byte, 2)
 	dataLen := uint16(len(data))
 	binary.BigEndian.PutUint16(buffer, dataLen)
 
 	buffer = append(buffer, data...)
 
-	if addr == nil {
-		_, err := conn.Write(buffer)
-		if err != nil {
-			log.Fatalln("Sending packet (addr) error:", err)
-		}
-	} else {
-		_, err := conn.WriteToUDP(buffer, addr)
-		if err != nil {
-			log.Fatalln("Sending packet (nil) error:", err)
-		}
+	_, err := conn.Write(buffer)
+	if err != nil {
+		log.Fatalln("Sending packet error:", err)
 	}
 }
 
-func ReceivePacket(client bool, conn *net.UDPConn) []byte {
+func ReceivePacket[T PacketData](client bool, conn *net.UDPConn, packet *Packet[T]) {
 	buffer := make([]byte, 512)
 
 	log.Printf("[%v] Receiving packet...", conn.LocalAddr())
@@ -104,7 +111,12 @@ func ReceivePacket(client bool, conn *net.UDPConn) []byte {
 	}
 
 	dataLen := binary.BigEndian.Uint16(buffer[0:])
-	return buffer[2 : dataLen+2]
+	bytes := buffer[2 : dataLen+2]
+
+	err := json.Unmarshal(bytes, &packet)
+	if err != nil {
+		log.Fatalln("Error when deserializing packet")
+	}
 }
 
 func Serialize(packet any) []byte {
@@ -113,4 +125,17 @@ func Serialize(packet any) []byte {
 		log.Fatalln("Error when serializing packet:", packet)
 	}
 	return data
+}
+
+func PacketKindFromBytes(bytes []byte) PacketKind {
+	type AnyKindPacket struct {
+		Kind PacketKind
+		Data any
+	}
+	var packet AnyKindPacket
+	err := json.Unmarshal(bytes, &packet)
+	if err != nil {
+		log.Fatalln("Error when deserializing packet")
+	}
+	return packet.Kind
 }

@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"log"
 	"net"
@@ -55,14 +54,10 @@ func main() {
 			if len(players) > 0 {
 				s.players.Range(func(key, value any) bool {
 					player := value.(*RemotePlayer)
-
-					var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
-					serverUpdatePacket.Kind = packets.ServerUpdate
-					serverUpdatePacket.Data = packets.ServerUpdateData{
-						PlayersData: players,
-					}
 					log.Println("Sending server update with players:", players)
-					packets.SendPacketTo(packetConn, player.addr, packets.Serialize(serverUpdatePacket))
+					packets.SendPacketTo(packetConn, player.addr, packets.ServerUpdate, packets.ServerUpdateData{
+						PlayersData: players,
+					})
 					return true
 				})
 			}
@@ -72,25 +67,15 @@ func main() {
 	for {
 		remoteAddr, buffer := packets.ReceivePacketWithAddr(packetConn)
 
-		var packet packets.Packet[any]
-		err = json.Unmarshal(buffer, &packet)
-		if err != nil {
-			log.Fatalln("Error when deserializing packet")
-		}
+		packetKind := packets.PacketKindFromBytes(buffer)
+		log.Println("Received packet of type:", packetKind)
 
-		fmt.Println("Packet of type ", packet.Kind)
-
-		switch packet.Kind {
+		switch packetKind {
 		case packets.Hello:
-			var welcomePacket packets.Packet[packets.WelcomePacketData]
-			welcomePacket.Kind = packets.ServerUpdate
-			welcomePacket.Data = packets.WelcomePacketData{
+			packets.SendPacketTo(packetConn, remoteAddr, packets.Welcome, packets.WelcomePacketData{
 				ClientId: uint8(s.nextClientId),
-			}
-			fmt.Println("Id: ", s.nextClientId)
+			})
 			atomic.AddUint32(&s.nextClientId, 1)
-			fmt.Println("Id after: ", s.nextClientId)
-			packets.SendPacketTo(packetConn, remoteAddr, packets.Serialize(welcomePacket))
 			break
 		case packets.PlayerUpdate:
 			var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
