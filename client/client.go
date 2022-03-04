@@ -110,7 +110,7 @@ func main() {
 	ebiten.SetWindowResizable(true)
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(144)
+	ebiten.SetMaxTPS(20)
 
 	go func() {
 		for {
