@@ -32,12 +32,6 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
-		ClientId: g.id,
-		X:        g.player.x,
-		Y:        g.player.y,
-	})
-
 	speed := 10.0
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
@@ -52,6 +46,14 @@ func (g *Game) Update() error {
 	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
 		g.player.y += speed
 	}
+
+	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
+		ClientId: g.id,
+		X:        g.player.x,
+		Y:        g.player.y,
+	})
+
+	// TODO Interpolate other players positions
 
 	return nil
 }
@@ -110,7 +112,7 @@ func main() {
 	ebiten.SetWindowResizable(true)
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(144)
+	ebiten.SetMaxTPS(20)
 
 	go func() {
 		for {
