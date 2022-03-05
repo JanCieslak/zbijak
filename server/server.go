@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"log"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Server struct {
@@ -37,7 +39,9 @@ func main() {
 	}
 
 	go func() {
+		tickTime := time.Second / constants.ServerTickRate
 		for {
+			start := time.Now()
 			players := make([]packets.PlayerData, 0)
 			s.players.Range(func(key, value any) bool {
 				player := value.(*RemotePlayer)
@@ -60,6 +64,10 @@ func main() {
 					})
 					return true
 				})
+			}
+
+			if time.Since(start) < tickTime {
+				time.Sleep(tickTime - time.Since(start))
 			}
 		}
 	}()

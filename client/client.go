@@ -1,19 +1,30 @@
 package main
 
 import (
+	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"golang.org/x/image/math/f64"
 	"image/color"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"sync"
+	"time"
 )
 
 const (
 	screenWidth  = 640
 	screenHeight = 480
+	tickRate     = 144
+	tickTime     = time.Second / tickRate
+	speed        = 2.5
+)
+
+var (
+	interpolationTicks = 144 / constants.ServerTickRate
 )
 
 type Player struct {
@@ -21,7 +32,7 @@ type Player struct {
 }
 
 type RemotePlayer struct {
-	x, y float64
+	x, y, targetX, targetY float64
 }
 
 type Game struct {
@@ -32,20 +43,26 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	speed := 10.0
+	// TODO Movement
+	moveVector := f64.Vec2{0, 0}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
-		g.player.x -= speed
+		moveVector[0] -= 1
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyArrowRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
-		g.player.x += speed
+		moveVector[0] += 1
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
-		g.player.y -= speed
+		moveVector[1] -= 1
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
-		g.player.y += speed
+		moveVector[1] += 1
 	}
+
+	normalize(&moveVector)
+	multiply(&moveVector, speed)
+	g.player.x += moveVector[0]
+	g.player.y += moveVector[1]
 
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
@@ -53,19 +70,34 @@ func (g *Game) Update() error {
 		Y:        g.player.y,
 	})
 
-	// TODO Interpolate other players positions
+	g.remotePlayers.Range(func(key, value any) bool {
+		remotePlayer := value.(*RemotePlayer)
+		moveVector := f64.Vec2{remotePlayer.targetX - remotePlayer.x, remotePlayer.targetY - remotePlayer.y}
+		normalize(&moveVector)
+		multiply(&moveVector, speed)
+
+		if math.Abs(remotePlayer.targetX-remotePlayer.x) > 5 || math.Abs(remotePlayer.targetY-remotePlayer.y) > 5 { // TODO 5??? (fix diagonal interpolation - missing frame ?)
+			remotePlayer.x += moveVector[0]
+			remotePlayer.y += moveVector[1]
+		}
+
+		return true
+	})
 
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	screen.Fill(color.Black)
 	ebitenutil.DrawRect(screen, g.player.x, g.player.y, 30, 30, color.White)
 
 	g.remotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.id {
+			//ebitenutil.DrawLine(screen, remotePlayer.targetX, remotePlayer.targetY, remotePlayer.targetX+30, remotePlayer.targetY, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			//ebitenutil.DrawLine(screen, remotePlayer.targetX+30, remotePlayer.targetY, remotePlayer.targetX+30, remotePlayer.targetY+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			//ebitenutil.DrawLine(screen, remotePlayer.targetX+30, remotePlayer.targetY+30, remotePlayer.targetX, remotePlayer.targetY+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			//ebitenutil.DrawLine(screen, remotePlayer.targetX, remotePlayer.targetY+30, remotePlayer.targetX, remotePlayer.targetY, color.RGBA{R: 255, G: 255, B: 255, A: 100})
 			ebitenutil.DrawRect(screen, remotePlayer.x, remotePlayer.y, 30, 30, color.RGBA{R: 100, G: 0, B: 0, A: 255})
 		}
 		return true
@@ -112,24 +144,52 @@ func main() {
 	ebiten.SetWindowResizable(true)
 	ebiten.SetWindowSize(screenWidth, screenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(20)
+	ebiten.SetMaxTPS(tickRate)
 
-	go func() {
-		for {
-			var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
-			packets.ReceivePacket(true, game.conn, &serverUpdatePacket)
-			serverUpdateData := serverUpdatePacket.Data
-
-			for _, player := range serverUpdateData.PlayersData {
-				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
-					x: player.X,
-					y: player.Y,
-				})
-			}
-		}
-	}()
+	go listen(game)
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalln(err)
 	}
+}
+
+func listen(game *Game) {
+	for {
+		var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
+		packets.ReceivePacket(true, game.conn, &serverUpdatePacket)
+		serverUpdateData := serverUpdatePacket.Data
+
+		for _, player := range serverUpdateData.PlayersData {
+			value, present := game.remotePlayers.Load(player.ClientId)
+			if present {
+				remotePlayer := value.(*RemotePlayer)
+				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
+					x:       remotePlayer.x,
+					y:       remotePlayer.y,
+					targetX: player.X,
+					targetY: player.Y,
+				})
+			} else {
+				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
+					x:       player.X,
+					y:       player.Y,
+					targetX: player.X,
+					targetY: player.Y,
+				})
+			}
+		}
+	}
+}
+
+func normalize(vector *f64.Vec2) {
+	length := math.Sqrt(math.Pow(vector[0], 2) + math.Pow(vector[1], 2))
+	if length != 0 {
+		vector[0] /= length
+		vector[1] /= length
+	}
+}
+
+func multiply(vector *f64.Vec2, mul float64) {
+	vector[0] *= mul
+	vector[1] *= mul
 }
