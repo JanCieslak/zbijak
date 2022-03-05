@@ -17,8 +17,9 @@ type Server struct {
 }
 
 type RemotePlayer struct {
-	addr net.Addr
-	x, y float64
+	addr   net.Addr
+	x, y   float64
+	inDash bool
 }
 
 func main() {
@@ -50,6 +51,7 @@ func main() {
 					ClientId: key.(uint8),
 					X:        player.x,
 					Y:        player.y,
+					InDash:   player.inDash,
 				})
 
 				return true
@@ -94,9 +96,10 @@ func main() {
 			playerUpdateData := playerUpdatePacket.Data
 
 			s.players.Store(playerUpdateData.ClientId, &RemotePlayer{
-				addr: remoteAddr,
-				x:    playerUpdateData.X,
-				y:    playerUpdateData.Y,
+				addr:   remoteAddr,
+				x:      playerUpdateData.X,
+				y:      playerUpdateData.Y,
+				inDash: playerUpdateData.InDash,
 			})
 			break
 		default:

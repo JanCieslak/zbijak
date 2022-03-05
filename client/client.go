@@ -19,8 +19,10 @@ const (
 	screenWidth  = 640
 	screenHeight = 480
 	tickRate     = 144
-	tickTime     = time.Second / tickRate
 	speed        = 2.5
+	dashSpeed    = 2 * speed
+	dashDuration = 250 * time.Millisecond
+	dashCooldown = time.Second
 )
 
 var (
@@ -28,11 +30,16 @@ var (
 )
 
 type Player struct {
-	x, y float64
+	x, y      float64
+	dashVec   f64.Vec2
+	inDash    bool
+	startDash time.Time
+	endDash   time.Time
 }
 
 type RemotePlayer struct {
 	x, y, targetX, targetY float64
+	inDash                 bool
 }
 
 type Game struct {
@@ -43,38 +50,63 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	// TODO Movement
 	moveVector := f64.Vec2{0, 0}
 
-	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
-		moveVector[0] -= 1
+	if !g.player.inDash {
+		if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
+			moveVector[0] -= 1
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyArrowRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
+			moveVector[0] += 1
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
+			moveVector[1] -= 1
+		}
+		if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
+			moveVector[1] += 1
+		}
 	}
-	if ebiten.IsKeyPressed(ebiten.KeyArrowRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
-		moveVector[0] += 1
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
-		moveVector[1] -= 1
-	}
-	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
-		moveVector[1] += 1
+	if !g.player.inDash && time.Since(g.player.endDash) > dashCooldown && ebiten.IsKeyPressed(ebiten.KeySpace) {
+		g.player.startDash = time.Now()
+		normalize(&moveVector)
+		multiply(&moveVector, dashSpeed)
+		g.player.dashVec = moveVector
+		g.player.inDash = true
 	}
 
-	normalize(&moveVector)
-	multiply(&moveVector, speed)
-	g.player.x += moveVector[0]
-	g.player.y += moveVector[1]
+	if g.player.inDash {
+		if time.Since(g.player.startDash) > dashDuration {
+			g.player.inDash = false
+			g.player.endDash = time.Now()
+		}
+
+		g.player.x += g.player.dashVec[0]
+		g.player.y += g.player.dashVec[1]
+	} else {
+		normalize(&moveVector)
+		multiply(&moveVector, speed)
+
+		g.player.x += moveVector[0]
+		g.player.y += moveVector[1]
+	}
 
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
 		X:        g.player.x,
 		Y:        g.player.y,
+		InDash:   g.player.inDash,
 	})
 
 	g.remotePlayers.Range(func(key, value any) bool {
 		remotePlayer := value.(*RemotePlayer)
 		moveVector := f64.Vec2{remotePlayer.targetX - remotePlayer.x, remotePlayer.targetY - remotePlayer.y}
 		normalize(&moveVector)
-		multiply(&moveVector, speed)
+
+		if remotePlayer.inDash {
+			multiply(&moveVector, dashSpeed)
+		} else {
+			multiply(&moveVector, speed)
+		}
 
 		if math.Abs(remotePlayer.targetX-remotePlayer.x) > 5 || math.Abs(remotePlayer.targetY-remotePlayer.y) > 5 { // TODO 5??? (fix diagonal interpolation - missing frame ?)
 			remotePlayer.x += moveVector[0]
@@ -133,8 +165,12 @@ func main() {
 	game := &Game{
 		id: welcomePacketData.ClientId,
 		player: &Player{
-			x: 250,
-			y: 250,
+			x:         250,
+			y:         250,
+			dashVec:   f64.Vec2{},
+			inDash:    false,
+			startDash: time.Now(),
+			endDash:   time.Now(),
 		},
 		conn:          conn,
 		remotePlayers: sync.Map{},
@@ -168,6 +204,7 @@ func listen(game *Game) {
 					y:       remotePlayer.y,
 					targetX: player.X,
 					targetY: player.Y,
+					inDash:  player.InDash,
 				})
 			} else {
 				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
@@ -175,6 +212,7 @@ func listen(game *Game) {
 					y:       player.Y,
 					targetX: player.X,
 					targetY: player.Y,
+					inDash:  player.InDash,
 				})
 			}
 		}

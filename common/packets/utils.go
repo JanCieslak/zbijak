@@ -25,11 +25,13 @@ type WelcomePacketData struct {
 type PlayerUpdateData struct {
 	ClientId uint8
 	X, Y     float64
+	InDash   bool
 }
 
 type PlayerData struct {
 	ClientId uint8
 	X, Y     float64
+	InDash   bool
 }
 
 type ServerUpdateData struct {
