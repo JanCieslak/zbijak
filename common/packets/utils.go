@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"time"
 )
 
 type PacketKind uint8
@@ -36,6 +37,7 @@ type PlayerData struct {
 
 type ServerUpdateData struct {
 	PlayersData []PlayerData
+	Timestamp   time.Time
 }
 
 type PacketData interface {

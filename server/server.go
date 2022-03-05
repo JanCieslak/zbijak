@@ -63,6 +63,7 @@ func main() {
 					log.Println("Sending server update with players:", players)
 					packets.SendPacketTo(packetConn, player.addr, packets.ServerUpdate, packets.ServerUpdateData{
 						PlayersData: players,
+						Timestamp:   time.Now(),
 					})
 					return true
 				})

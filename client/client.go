@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -25,10 +24,6 @@ const (
 	dashCooldown = time.Second
 )
 
-var (
-	interpolationTicks = 144 / constants.ServerTickRate
-)
-
 type Player struct {
 	x, y      float64
 	dashVec   f64.Vec2
@@ -43,10 +38,11 @@ type RemotePlayer struct {
 }
 
 type Game struct {
-	id            uint8
-	player        *Player
-	conn          *net.UDPConn
-	remotePlayers sync.Map
+	id               uint8
+	player           *Player
+	conn             *net.UDPConn
+	remotePlayers    sync.Map
+	lastServerUpdate time.Time
 }
 
 func (g *Game) Update() error {
@@ -172,8 +168,9 @@ func main() {
 			startDash: time.Now(),
 			endDash:   time.Now(),
 		},
-		conn:          conn,
-		remotePlayers: sync.Map{},
+		conn:             conn,
+		remotePlayers:    sync.Map{},
+		lastServerUpdate: time.Now(),
 	}
 
 	ebiten.SetWindowTitle("Zbijak")
@@ -195,25 +192,27 @@ func listen(game *Game) {
 		packets.ReceivePacket(true, game.conn, &serverUpdatePacket)
 		serverUpdateData := serverUpdatePacket.Data
 
-		for _, player := range serverUpdateData.PlayersData {
-			value, present := game.remotePlayers.Load(player.ClientId)
-			if present {
-				remotePlayer := value.(*RemotePlayer)
-				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
-					x:       remotePlayer.x,
-					y:       remotePlayer.y,
-					targetX: player.X,
-					targetY: player.Y,
-					inDash:  player.InDash,
-				})
-			} else {
-				game.remotePlayers.Store(player.ClientId, &RemotePlayer{
-					x:       player.X,
-					y:       player.Y,
-					targetX: player.X,
-					targetY: player.Y,
-					inDash:  player.InDash,
-				})
+		if game.lastServerUpdate.Before(serverUpdateData.Timestamp) {
+			for _, player := range serverUpdateData.PlayersData {
+				value, present := game.remotePlayers.Load(player.ClientId)
+				if present {
+					remotePlayer := value.(*RemotePlayer)
+					game.remotePlayers.Store(player.ClientId, &RemotePlayer{
+						x:       remotePlayer.x,
+						y:       remotePlayer.y,
+						targetX: player.X,
+						targetY: player.Y,
+						inDash:  player.InDash,
+					})
+				} else {
+					game.remotePlayers.Store(player.ClientId, &RemotePlayer{
+						x:       player.X,
+						y:       player.Y,
+						targetX: player.X,
+						targetY: player.Y,
+						inDash:  player.InDash,
+					})
+				}
 			}
 		}
 	}
