@@ -58,12 +58,13 @@ func main() {
 			})
 
 			if len(players) > 0 {
+				timeStamp := time.Now()
 				s.players.Range(func(key, value any) bool {
 					player := value.(*RemotePlayer)
 					log.Println("Sending server update with players:", players)
 					packets.SendPacketTo(packetConn, player.addr, packets.ServerUpdate, packets.ServerUpdateData{
 						PlayersData: players,
-						Timestamp:   time.Now(),
+						Timestamp:   timeStamp,
 					})
 					return true
 				})

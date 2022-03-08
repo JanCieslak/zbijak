@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -15,13 +16,14 @@ import (
 )
 
 const (
-	screenWidth  = 640
-	screenHeight = 480
-	tickRate     = 144
-	speed        = 2.5
-	dashSpeed    = 2 * speed
-	dashDuration = 250 * time.Millisecond
-	dashCooldown = time.Second
+	screenWidth         = 640
+	screenHeight        = 480
+	tickRate            = 144
+	speed               = 2.5
+	dashSpeed           = 2 * speed
+	dashDuration        = 250 * time.Millisecond
+	dashCooldown        = time.Second
+	interpolationOffset = 100
 )
 
 type Player struct {
@@ -38,11 +40,13 @@ type RemotePlayer struct {
 }
 
 type Game struct {
-	id               uint8
-	player           *Player
-	conn             *net.UDPConn
-	remotePlayers    sync.Map
+	id            uint8
+	player        *Player
+	conn          *net.UDPConn
+	remotePlayers sync.Map
+
 	lastServerUpdate time.Time
+	serverUpdates    []packets.ServerUpdateData
 }
 
 func (g *Game) Update() error {
@@ -93,39 +97,79 @@ func (g *Game) Update() error {
 		InDash:   g.player.inDash,
 	})
 
-	g.remotePlayers.Range(func(key, value any) bool {
-		remotePlayer := value.(*RemotePlayer)
-		moveVector := f64.Vec2{remotePlayer.targetX - remotePlayer.x, remotePlayer.targetY - remotePlayer.y}
-		normalize(&moveVector)
-
-		if remotePlayer.inDash {
-			multiply(&moveVector, dashSpeed)
-		} else {
-			multiply(&moveVector, speed)
+	renderTime := time.Now().Add(-interpolationOffset * time.Millisecond)
+	if len(g.serverUpdates) > 1 {
+		fmt.Println("Len before", len(g.serverUpdates))
+		for len(g.serverUpdates) > 2 && renderTime.After(g.serverUpdates[1].Timestamp) {
+			g.serverUpdates = append(g.serverUpdates[:0], g.serverUpdates[1:]...)
 		}
+		fmt.Println("Len after", len(g.serverUpdates))
+		interpolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) / float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())
 
-		if math.Abs(remotePlayer.targetX-remotePlayer.x) > 5 || math.Abs(remotePlayer.targetY-remotePlayer.y) > 5 { // TODO 5??? (fix diagonal interpolation - missing frame ?)
-			remotePlayer.x += moveVector[0]
-			remotePlayer.y += moveVector[1]
+		fmt.Println("IterpolationFactor", interpolationFactor)
+
+		if len(g.serverUpdates[0].PlayersData) == len(g.serverUpdates[1].PlayersData) {
+			for _, player := range g.serverUpdates[1].PlayersData {
+				g.remotePlayers.Range(func(key, value any) bool {
+					clientId := key.(uint8)
+
+					if player.ClientId == clientId {
+						remotePlayer := value.(*RemotePlayer)
+
+						var playerOne packets.PlayerData
+						var playerTwo packets.PlayerData
+
+						for _, p1 := range g.serverUpdates[0].PlayersData {
+							if p1.ClientId == clientId {
+								playerOne = p1
+								break
+							}
+						}
+
+						for _, p2 := range g.serverUpdates[1].PlayersData {
+							if p2.ClientId == clientId {
+								playerTwo = p2
+								break
+							}
+						}
+
+						newX := Lerp(playerOne.X, playerTwo.X, interpolationFactor)
+						newY := Lerp(playerOne.Y, playerTwo.Y, interpolationFactor)
+
+						remotePlayer.x = newX
+						remotePlayer.y = newY
+						return false
+					}
+
+					return true
+				})
+			}
 		}
-
-		return true
-	})
+	}
 
 	return nil
+}
+
+func Lerp(start, end, p float64) float64 {
+	return start + (end-start)*p
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DrawRect(screen, g.player.x, g.player.y, 30, 30, color.White)
 
+	for _, update := range g.serverUpdates {
+		for _, player := range update.PlayersData {
+			ebitenutil.DrawLine(screen, player.X, player.Y, player.X+30, player.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.X+30, player.Y, player.X+30, player.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.X+30, player.Y+30, player.X, player.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.X, player.Y+30, player.X, player.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+		}
+	}
+
 	g.remotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.id {
-			//ebitenutil.DrawLine(screen, remotePlayer.targetX, remotePlayer.targetY, remotePlayer.targetX+30, remotePlayer.targetY, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			//ebitenutil.DrawLine(screen, remotePlayer.targetX+30, remotePlayer.targetY, remotePlayer.targetX+30, remotePlayer.targetY+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			//ebitenutil.DrawLine(screen, remotePlayer.targetX+30, remotePlayer.targetY+30, remotePlayer.targetX, remotePlayer.targetY+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			//ebitenutil.DrawLine(screen, remotePlayer.targetX, remotePlayer.targetY+30, remotePlayer.targetX, remotePlayer.targetY, color.RGBA{R: 255, G: 255, B: 255, A: 100})
 			ebitenutil.DrawRect(screen, remotePlayer.x, remotePlayer.y, 30, 30, color.RGBA{R: 100, G: 0, B: 0, A: 255})
 		}
 		return true
@@ -193,6 +237,9 @@ func listen(game *Game) {
 		serverUpdateData := serverUpdatePacket.Data
 
 		if game.lastServerUpdate.Before(serverUpdateData.Timestamp) {
+			game.lastServerUpdate = serverUpdateData.Timestamp
+			game.serverUpdates = append(game.serverUpdates, serverUpdateData)
+
 			for _, player := range serverUpdateData.PlayersData {
 				value, present := game.remotePlayers.Load(player.ClientId)
 				if present {

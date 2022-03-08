@@ -1,5 +1,5 @@
 package constants
 
 const (
-	ServerTickRate = 60
+	ServerTickRate = 144
 )
