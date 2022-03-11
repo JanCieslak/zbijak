@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -23,7 +22,7 @@ const (
 	dashSpeed           = 2 * speed
 	dashDuration        = 250 * time.Millisecond
 	dashCooldown        = time.Second
-	interpolationOffset = 100
+	interpolationOffset = 50
 )
 
 type Player struct {
@@ -99,16 +98,53 @@ func (g *Game) Update() error {
 
 	renderTime := time.Now().Add(-interpolationOffset * time.Millisecond)
 	if len(g.serverUpdates) > 1 {
-		fmt.Println("Len before", len(g.serverUpdates))
 		for len(g.serverUpdates) > 2 && renderTime.After(g.serverUpdates[1].Timestamp) {
 			g.serverUpdates = append(g.serverUpdates[:0], g.serverUpdates[1:]...)
 		}
-		fmt.Println("Len after", len(g.serverUpdates))
-		interpolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) / float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())
 
-		fmt.Println("IterpolationFactor", interpolationFactor)
+		// Interpolation
+		if len(g.serverUpdates) > 2 {
+			interpolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) / float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())
+			if len(g.serverUpdates[0].PlayersData) == len(g.serverUpdates[1].PlayersData) {
+				for _, player := range g.serverUpdates[1].PlayersData {
+					g.remotePlayers.Range(func(key, value any) bool {
+						clientId := key.(uint8)
 
-		if len(g.serverUpdates[0].PlayersData) == len(g.serverUpdates[1].PlayersData) {
+						if player.ClientId == clientId {
+							remotePlayer := value.(*RemotePlayer)
+
+							var playerOne packets.PlayerData
+							var playerTwo packets.PlayerData
+
+							for _, p1 := range g.serverUpdates[0].PlayersData {
+								if p1.ClientId == clientId {
+									playerOne = p1
+									break
+								}
+							}
+
+							for _, p2 := range g.serverUpdates[1].PlayersData {
+								if p2.ClientId == clientId {
+									playerTwo = p2
+									break
+								}
+							}
+
+							newX := Lerp(playerOne.X, playerTwo.X, interpolationFactor)
+							newY := Lerp(playerOne.Y, playerTwo.Y, interpolationFactor)
+
+							remotePlayer.x = newX
+							remotePlayer.y = newY
+							return false
+						}
+
+						return true
+					})
+				}
+			}
+			// Extrapolation TODO Test
+		} else if renderTime.After(g.serverUpdates[1].Timestamp) {
+			extrapolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())/float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) - 1.0
 			for _, player := range g.serverUpdates[1].PlayersData {
 				g.remotePlayers.Range(func(key, value any) bool {
 					clientId := key.(uint8)
@@ -133,11 +169,13 @@ func (g *Game) Update() error {
 							}
 						}
 
-						newX := Lerp(playerOne.X, playerTwo.X, interpolationFactor)
-						newY := Lerp(playerOne.Y, playerTwo.Y, interpolationFactor)
+						positionDelta := f64.Vec2{playerTwo.X - playerOne.X, playerTwo.Y - playerOne.Y}
+						newX := playerTwo.X + (positionDelta[0] * extrapolationFactor)
+						newY := playerTwo.Y + (positionDelta[1] * extrapolationFactor)
 
 						remotePlayer.x = newX
 						remotePlayer.y = newY
+
 						return false
 					}
 
