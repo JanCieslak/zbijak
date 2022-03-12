@@ -36,7 +36,7 @@ type PlayerData struct {
 }
 
 type ServerUpdateData struct {
-	PlayersData []PlayerData
+	PlayersData map[uint8]PlayerData
 	Timestamp   time.Time
 }
 

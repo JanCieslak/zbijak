@@ -2,13 +2,13 @@ package main
 
 import (
 	"github.com/JanCieslak/zbijak/common/packets"
+	"github.com/JanCieslak/zbijak/common/vector"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"golang.org/x/image/math/f64"
 	"image/color"
 	"io/ioutil"
 	"log"
-	"math"
 	"net"
 	"sync"
 	"time"
@@ -22,12 +22,13 @@ const (
 	dashSpeed           = 2 * speed
 	dashDuration        = 250 * time.Millisecond
 	dashCooldown        = time.Second
-	interpolationOffset = 50
+	interpolationOffset = 100
 )
 
 type Player struct {
-	x, y      float64
-	dashVec   f64.Vec2
+	//x, y      float64
+	pos       vector.Vec2
+	dashVec   vector.Vec2
 	inDash    bool
 	startDash time.Time
 	endDash   time.Time
@@ -49,26 +50,29 @@ type Game struct {
 }
 
 func (g *Game) Update() error {
-	moveVector := f64.Vec2{0, 0}
+	moveVector := vector.Vec2{}
 
 	if !g.player.inDash {
 		if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
-			moveVector[0] -= 1
+			moveVector.Add(-1, 0)
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyArrowRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
-			moveVector[0] += 1
+			moveVector.Add(1, 0)
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
-			moveVector[1] -= 1
+			moveVector.Add(0, -1)
 		}
 		if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
-			moveVector[1] += 1
+			moveVector.Add(0, 1)
 		}
 	}
+
 	if !g.player.inDash && time.Since(g.player.endDash) > dashCooldown && ebiten.IsKeyPressed(ebiten.KeySpace) {
 		g.player.startDash = time.Now()
-		normalize(&moveVector)
-		multiply(&moveVector, dashSpeed)
+
+		moveVector.Normalize()
+		moveVector.Mul(dashSpeed)
+
 		g.player.dashVec = moveVector
 		g.player.inDash = true
 	}
@@ -79,20 +83,18 @@ func (g *Game) Update() error {
 			g.player.endDash = time.Now()
 		}
 
-		g.player.x += g.player.dashVec[0]
-		g.player.y += g.player.dashVec[1]
+		g.player.pos.AddVec(g.player.dashVec)
 	} else {
-		normalize(&moveVector)
-		multiply(&moveVector, speed)
+		moveVector.Normalize()
+		moveVector.Mul(speed)
 
-		g.player.x += moveVector[0]
-		g.player.y += moveVector[1]
+		g.player.pos.AddVec(moveVector)
 	}
 
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
-		X:        g.player.x,
-		Y:        g.player.y,
+		X:        g.player.pos.X,
+		Y:        g.player.pos.Y,
 		InDash:   g.player.inDash,
 	})
 
@@ -105,83 +107,44 @@ func (g *Game) Update() error {
 		// Interpolation
 		if len(g.serverUpdates) > 2 {
 			interpolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) / float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())
-			if len(g.serverUpdates[0].PlayersData) == len(g.serverUpdates[1].PlayersData) {
-				for _, player := range g.serverUpdates[1].PlayersData {
-					g.remotePlayers.Range(func(key, value any) bool {
-						clientId := key.(uint8)
+			g.remotePlayers.Range(func(key, value any) bool {
+				clientId := key.(uint8)
+				remotePlayer := value.(*RemotePlayer)
 
-						if player.ClientId == clientId {
-							remotePlayer := value.(*RemotePlayer)
+				playerOne, ok0 := g.serverUpdates[0].PlayersData[clientId]
+				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
 
-							var playerOne packets.PlayerData
-							var playerTwo packets.PlayerData
+				if ok0 && ok1 {
+					newX := Lerp(playerOne.X, playerTwo.X, interpolationFactor)
+					newY := Lerp(playerOne.Y, playerTwo.Y, interpolationFactor)
 
-							for _, p1 := range g.serverUpdates[0].PlayersData {
-								if p1.ClientId == clientId {
-									playerOne = p1
-									break
-								}
-							}
-
-							for _, p2 := range g.serverUpdates[1].PlayersData {
-								if p2.ClientId == clientId {
-									playerTwo = p2
-									break
-								}
-							}
-
-							newX := Lerp(playerOne.X, playerTwo.X, interpolationFactor)
-							newY := Lerp(playerOne.Y, playerTwo.Y, interpolationFactor)
-
-							remotePlayer.x = newX
-							remotePlayer.y = newY
-							return false
-						}
-
-						return true
-					})
+					remotePlayer.x = newX
+					remotePlayer.y = newY
 				}
-			}
+
+				return true
+			})
 			// Extrapolation TODO Test
 		} else if renderTime.After(g.serverUpdates[1].Timestamp) {
 			extrapolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())/float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) - 1.0
-			for _, player := range g.serverUpdates[1].PlayersData {
-				g.remotePlayers.Range(func(key, value any) bool {
-					clientId := key.(uint8)
+			g.remotePlayers.Range(func(key, value any) bool {
+				clientId := key.(uint8)
+				remotePlayer := value.(*RemotePlayer)
 
-					if player.ClientId == clientId {
-						remotePlayer := value.(*RemotePlayer)
+				playerOne, ok0 := g.serverUpdates[0].PlayersData[clientId]
+				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
 
-						var playerOne packets.PlayerData
-						var playerTwo packets.PlayerData
+				if ok0 && ok1 {
+					positionDelta := f64.Vec2{playerTwo.X - playerOne.X, playerTwo.Y - playerOne.Y}
+					newX := playerTwo.X + (positionDelta[0] * extrapolationFactor)
+					newY := playerTwo.Y + (positionDelta[1] * extrapolationFactor)
 
-						for _, p1 := range g.serverUpdates[0].PlayersData {
-							if p1.ClientId == clientId {
-								playerOne = p1
-								break
-							}
-						}
+					remotePlayer.x = newX
+					remotePlayer.y = newY
+				}
 
-						for _, p2 := range g.serverUpdates[1].PlayersData {
-							if p2.ClientId == clientId {
-								playerTwo = p2
-								break
-							}
-						}
-
-						positionDelta := f64.Vec2{playerTwo.X - playerOne.X, playerTwo.Y - playerOne.Y}
-						newX := playerTwo.X + (positionDelta[0] * extrapolationFactor)
-						newY := playerTwo.Y + (positionDelta[1] * extrapolationFactor)
-
-						remotePlayer.x = newX
-						remotePlayer.y = newY
-
-						return false
-					}
-
-					return true
-				})
-			}
+				return true
+			})
 		}
 	}
 
@@ -193,7 +156,7 @@ func Lerp(start, end, p float64) float64 {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	ebitenutil.DrawRect(screen, g.player.x, g.player.y, 30, 30, color.White)
+	ebitenutil.DrawRect(screen, g.player.pos.X, g.player.pos.Y, 30, 30, color.White)
 
 	for _, update := range g.serverUpdates {
 		for _, player := range update.PlayersData {
@@ -243,9 +206,8 @@ func main() {
 	game := &Game{
 		id: welcomePacketData.ClientId,
 		player: &Player{
-			x:         250,
-			y:         250,
-			dashVec:   f64.Vec2{},
+			pos:       vector.Vec2{X: 250, Y: 250},
+			dashVec:   vector.Vec2{},
 			inDash:    false,
 			startDash: time.Now(),
 			endDash:   time.Now(),
@@ -301,17 +263,4 @@ func listen(game *Game) {
 			}
 		}
 	}
-}
-
-func normalize(vector *f64.Vec2) {
-	length := math.Sqrt(math.Pow(vector[0], 2) + math.Pow(vector[1], 2))
-	if length != 0 {
-		vector[0] /= length
-		vector[1] /= length
-	}
-}
-
-func multiply(vector *f64.Vec2, mul float64) {
-	vector[0] *= mul
-	vector[1] *= mul
 }

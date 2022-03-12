@@ -43,16 +43,16 @@ func main() {
 		tickTime := time.Second / constants.ServerTickRate
 		for {
 			start := time.Now()
-			players := make([]packets.PlayerData, 0)
+			players := map[uint8]packets.PlayerData{}
 			s.players.Range(func(key, value any) bool {
 				player := value.(*RemotePlayer)
 
-				players = append(players, packets.PlayerData{
+				players[key.(uint8)] = packets.PlayerData{
 					ClientId: key.(uint8),
 					X:        player.x,
 					Y:        player.y,
 					InDash:   player.inDash,
-				})
+				}
 
 				return true
 			})
