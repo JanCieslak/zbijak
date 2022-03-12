@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/JanCieslak/zbijak/common/vector"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -22,7 +23,7 @@ const (
 	dashSpeed           = 2 * speed
 	dashDuration        = 250 * time.Millisecond
 	dashCooldown        = time.Second
-	interpolationOffset = 100
+	interpolationOffset = 10
 )
 
 type Player struct {
@@ -93,9 +94,7 @@ func (g *Game) Update() error {
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
 		Pos:      g.player.pos,
-		//X:        g.player.pos.X,
-		//Y:        g.player.pos.Y,
-		InDash: g.player.inDash,
+		InDash:   g.player.inDash,
 	})
 
 	renderTime := time.Now().Add(-interpolationOffset * time.Millisecond)
@@ -125,6 +124,7 @@ func (g *Game) Update() error {
 			})
 			// Extrapolation TODO Test
 		} else if renderTime.After(g.serverUpdates[1].Timestamp) {
+			fmt.Println("HEY") // TODO not calling
 			extrapolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())/float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) - 1.0
 			g.remotePlayers.Range(func(key, value any) bool {
 				clientId := key.(uint8)
@@ -156,14 +156,14 @@ func Lerp(start, end, p float64) float64 {
 func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DrawRect(screen, g.player.pos.X, g.player.pos.Y, 30, 30, color.White)
 
-	for _, update := range g.serverUpdates {
-		for _, player := range update.PlayersData {
-			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y, player.Pos.X+30, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y, player.Pos.X+30, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y+30, player.Pos.X, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y+30, player.Pos.X, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-		}
-	}
+	//for _, update := range g.serverUpdates {
+	//	for _, player := range update.PlayersData {
+	//		ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y, player.Pos.X+30, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	//		ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y, player.Pos.X+30, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	//		ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y+30, player.Pos.X, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	//		ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y+30, player.Pos.X, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	//	}
+	//}
 
 	g.remotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
@@ -239,15 +239,10 @@ func listen(game *Game) {
 			game.serverUpdates = append(game.serverUpdates, serverUpdateData)
 
 			for _, player := range serverUpdateData.PlayersData {
-				value, loaded := game.remotePlayers.LoadOrStore(player.ClientId, &RemotePlayer{
+				_, _ = game.remotePlayers.LoadOrStore(player.ClientId, &RemotePlayer{
 					pos:    player.Pos,
 					inDash: player.InDash,
 				})
-
-				if loaded {
-					remotePlayer := value.(*RemotePlayer)
-					remotePlayer.pos.SetFrom(remotePlayer.pos)
-				}
 			}
 		}
 	}
