@@ -6,6 +6,16 @@ type Vec2 struct {
 	X, Y float64
 }
 
+func (v *Vec2) Set(x, y float64) {
+	v.X = x
+	v.Y = y
+}
+
+func (v *Vec2) SetFrom(other Vec2) {
+	v.X = other.X
+	v.Y = other.Y
+}
+
 func (v *Vec2) AddVec(other Vec2) {
 	v.X += other.X
 	v.Y += other.Y

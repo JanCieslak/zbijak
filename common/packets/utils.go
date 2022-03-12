@@ -3,6 +3,7 @@ package packets
 import (
 	"encoding/binary"
 	"encoding/json"
+	"github.com/JanCieslak/zbijak/common/vector"
 	"log"
 	"net"
 	"time"
@@ -25,13 +26,13 @@ type WelcomePacketData struct {
 
 type PlayerUpdateData struct {
 	ClientId uint8
-	X, Y     float64
+	Pos      vector.Vec2
 	InDash   bool
 }
 
 type PlayerData struct {
 	ClientId uint8
-	X, Y     float64
+	Pos      vector.Vec2
 	InDash   bool
 }
 

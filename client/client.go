@@ -26,7 +26,6 @@ const (
 )
 
 type Player struct {
-	//x, y      float64
 	pos       vector.Vec2
 	dashVec   vector.Vec2
 	inDash    bool
@@ -35,8 +34,8 @@ type Player struct {
 }
 
 type RemotePlayer struct {
-	x, y, targetX, targetY float64
-	inDash                 bool
+	pos    vector.Vec2
+	inDash bool
 }
 
 type Game struct {
@@ -93,9 +92,10 @@ func (g *Game) Update() error {
 
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
-		X:        g.player.pos.X,
-		Y:        g.player.pos.Y,
-		InDash:   g.player.inDash,
+		Pos:      g.player.pos,
+		//X:        g.player.pos.X,
+		//Y:        g.player.pos.Y,
+		InDash: g.player.inDash,
 	})
 
 	renderTime := time.Now().Add(-interpolationOffset * time.Millisecond)
@@ -115,11 +115,10 @@ func (g *Game) Update() error {
 				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
 
 				if ok0 && ok1 {
-					newX := Lerp(playerOne.X, playerTwo.X, interpolationFactor)
-					newY := Lerp(playerOne.Y, playerTwo.Y, interpolationFactor)
+					newX := Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
+					newY := Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
 
-					remotePlayer.x = newX
-					remotePlayer.y = newY
+					remotePlayer.pos.Set(newX, newY)
 				}
 
 				return true
@@ -135,12 +134,11 @@ func (g *Game) Update() error {
 				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
 
 				if ok0 && ok1 {
-					positionDelta := f64.Vec2{playerTwo.X - playerOne.X, playerTwo.Y - playerOne.Y}
-					newX := playerTwo.X + (positionDelta[0] * extrapolationFactor)
-					newY := playerTwo.Y + (positionDelta[1] * extrapolationFactor)
+					positionDelta := f64.Vec2{playerTwo.Pos.X - playerOne.Pos.X, playerTwo.Pos.Y - playerOne.Pos.Y}
+					newX := playerTwo.Pos.X + (positionDelta[0] * extrapolationFactor)
+					newY := playerTwo.Pos.Y + (positionDelta[1] * extrapolationFactor)
 
-					remotePlayer.x = newX
-					remotePlayer.y = newY
+					remotePlayer.pos.Set(newX, newY)
 				}
 
 				return true
@@ -160,10 +158,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	for _, update := range g.serverUpdates {
 		for _, player := range update.PlayersData {
-			ebitenutil.DrawLine(screen, player.X, player.Y, player.X+30, player.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.X+30, player.Y, player.X+30, player.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.X+30, player.Y+30, player.X, player.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.X, player.Y+30, player.X, player.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y, player.Pos.X+30, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y, player.Pos.X+30, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y+30, player.Pos.X, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y+30, player.Pos.X, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
 		}
 	}
 
@@ -171,7 +169,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.id {
-			ebitenutil.DrawRect(screen, remotePlayer.x, remotePlayer.y, 30, 30, color.RGBA{R: 100, G: 0, B: 0, A: 255})
+			ebitenutil.DrawRect(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 30, 30, color.RGBA{R: 100, G: 0, B: 0, A: 255})
 		}
 		return true
 	})
@@ -241,24 +239,14 @@ func listen(game *Game) {
 			game.serverUpdates = append(game.serverUpdates, serverUpdateData)
 
 			for _, player := range serverUpdateData.PlayersData {
-				value, present := game.remotePlayers.Load(player.ClientId)
-				if present {
+				value, loaded := game.remotePlayers.LoadOrStore(player.ClientId, &RemotePlayer{
+					pos:    player.Pos,
+					inDash: player.InDash,
+				})
+
+				if loaded {
 					remotePlayer := value.(*RemotePlayer)
-					game.remotePlayers.Store(player.ClientId, &RemotePlayer{
-						x:       remotePlayer.x,
-						y:       remotePlayer.y,
-						targetX: player.X,
-						targetY: player.Y,
-						inDash:  player.InDash,
-					})
-				} else {
-					game.remotePlayers.Store(player.ClientId, &RemotePlayer{
-						x:       player.X,
-						y:       player.Y,
-						targetX: player.X,
-						targetY: player.Y,
-						inDash:  player.InDash,
-					})
+					remotePlayer.pos.SetFrom(remotePlayer.pos)
 				}
 			}
 		}

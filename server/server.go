@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
+	"github.com/JanCieslak/zbijak/common/vector"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -18,13 +20,13 @@ type Server struct {
 
 type RemotePlayer struct {
 	addr   net.Addr
-	x, y   float64
+	pos    vector.Vec2
 	inDash bool
 }
 
 func main() {
 	log.SetPrefix("Server - ")
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
 
 	// TODO Changge to UDPConn (it implements ListenPacket)
 	packetConn, err := net.ListenPacket("udp", ":8083")
@@ -41,16 +43,18 @@ func main() {
 
 	go func() {
 		tickTime := time.Second / constants.ServerTickRate
+
 		for {
 			start := time.Now()
 			players := map[uint8]packets.PlayerData{}
+
 			s.players.Range(func(key, value any) bool {
+				clientId := key.(uint8)
 				player := value.(*RemotePlayer)
 
-				players[key.(uint8)] = packets.PlayerData{
-					ClientId: key.(uint8),
-					X:        player.x,
-					Y:        player.y,
+				players[clientId] = packets.PlayerData{
+					ClientId: clientId,
+					Pos:      player.pos,
 					InDash:   player.inDash,
 				}
 
@@ -59,6 +63,7 @@ func main() {
 
 			if len(players) > 0 {
 				timeStamp := time.Now()
+
 				s.players.Range(func(key, value any) bool {
 					player := value.(*RemotePlayer)
 					log.Println("Sending server update with players:", players)
@@ -99,8 +104,7 @@ func main() {
 
 			s.players.Store(playerUpdateData.ClientId, &RemotePlayer{
 				addr:   remoteAddr,
-				x:      playerUpdateData.X,
-				y:      playerUpdateData.Y,
+				pos:    playerUpdateData.Pos,
 				inDash: playerUpdateData.InDash,
 			})
 			break
