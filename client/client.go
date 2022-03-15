@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -20,19 +21,8 @@ const (
 	screenHeight        = 480
 	tickRate            = 144
 	speed               = 2.5
-	dashSpeed           = 2 * speed
-	dashDuration        = 250 * time.Millisecond
-	dashCooldown        = time.Second
-	interpolationOffset = 10
+	interpolationOffset = 100
 )
-
-type Player struct {
-	pos       vector.Vec2
-	dashVec   vector.Vec2
-	inDash    bool
-	startDash time.Time
-	endDash   time.Time
-}
 
 type RemotePlayer struct {
 	pos    vector.Vec2
@@ -42,59 +32,20 @@ type RemotePlayer struct {
 type Game struct {
 	id            uint8
 	player        *Player
-	conn          *net.UDPConn
-	remotePlayers sync.Map
+	conn          *net.UDPConn // TODO Abstract - NetworkManager
+	remotePlayers sync.Map     // TODO Abstract - World
 
 	lastServerUpdate time.Time
 	serverUpdates    []packets.ServerUpdateData
 }
 
 func (g *Game) Update() error {
-	moveVector := vector.Vec2{}
-
-	if !g.player.inDash {
-		if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
-			moveVector.Add(-1, 0)
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyArrowRight) || ebiten.IsKeyPressed(ebiten.KeyD) {
-			moveVector.Add(1, 0)
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) || ebiten.IsKeyPressed(ebiten.KeyW) {
-			moveVector.Add(0, -1)
-		}
-		if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
-			moveVector.Add(0, 1)
-		}
-	}
-
-	if !g.player.inDash && time.Since(g.player.endDash) > dashCooldown && ebiten.IsKeyPressed(ebiten.KeySpace) {
-		g.player.startDash = time.Now()
-
-		moveVector.Normalize()
-		moveVector.Mul(dashSpeed)
-
-		g.player.dashVec = moveVector
-		g.player.inDash = true
-	}
-
-	if g.player.inDash {
-		if time.Since(g.player.startDash) > dashDuration {
-			g.player.inDash = false
-			g.player.endDash = time.Now()
-		}
-
-		g.player.pos.AddVec(g.player.dashVec)
-	} else {
-		moveVector.Normalize()
-		moveVector.Mul(speed)
-
-		g.player.pos.AddVec(moveVector)
-	}
+	g.player.Update()
 
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
 		Pos:      g.player.pos,
-		InDash:   g.player.inDash,
+		InDash:   reflect.TypeOf(g.player.state) == reflect.TypeOf(DashState{}),
 	})
 
 	renderTime := time.Now().Add(-interpolationOffset * time.Millisecond)
@@ -156,14 +107,17 @@ func Lerp(start, end, p float64) float64 {
 func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DrawRect(screen, g.player.pos.X, g.player.pos.Y, 30, 30, color.White)
 
-	//for _, update := range g.serverUpdates {
-	//	for _, player := range update.PlayersData {
-	//		ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y, player.Pos.X+30, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-	//		ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y, player.Pos.X+30, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-	//		ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y+30, player.Pos.X, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-	//		ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y+30, player.Pos.X, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-	//	}
-	//}
+	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
+	ebitenutil.DebugPrint(screen, info)
+
+	for _, update := range g.serverUpdates {
+		for _, player := range update.PlayersData {
+			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y, player.Pos.X+30, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y, player.Pos.X+30, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y+30, player.Pos.X, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y+30, player.Pos.X, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+		}
+	}
 
 	g.remotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
@@ -204,11 +158,8 @@ func main() {
 	game := &Game{
 		id: welcomePacketData.ClientId,
 		player: &Player{
-			pos:       vector.Vec2{X: 250, Y: 250},
-			dashVec:   vector.Vec2{},
-			inDash:    false,
-			startDash: time.Now(),
-			endDash:   time.Now(),
+			pos:   vector.Vec2{X: 250, Y: 250},
+			state: NormalState{},
 		},
 		conn:             conn,
 		remotePlayers:    sync.Map{},
