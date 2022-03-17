@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	screenWidth         = 640
-	screenHeight        = 480
-	tickRate            = 144
-	speed               = 2.5
-	interpolationOffset = 100
+	ScreenWidth         = 640
+	ScreenHeight        = 480
+	TickRate            = 144
+	Speed               = 2.5
+	InterpolationOffset = 100
 )
 
 type RemotePlayer struct {
@@ -44,11 +44,11 @@ func (g *Game) Update() error {
 
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
 		ClientId: g.id,
-		Pos:      g.player.pos,
-		InDash:   reflect.TypeOf(g.player.state) == reflect.TypeOf(DashState{}),
+		Pos:      g.player.Pos,
+		InDash:   reflect.TypeOf(g.player.State) == reflect.TypeOf(DashState{}),
 	})
 
-	renderTime := time.Now().Add(-interpolationOffset * time.Millisecond)
+	renderTime := time.Now().Add(-InterpolationOffset * time.Millisecond)
 	if len(g.serverUpdates) > 1 {
 		for len(g.serverUpdates) > 2 && renderTime.After(g.serverUpdates[1].Timestamp) {
 			g.serverUpdates = append(g.serverUpdates[:0], g.serverUpdates[1:]...)
@@ -105,7 +105,7 @@ func Lerp(start, end, p float64) float64 {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
-	ebitenutil.DrawRect(screen, g.player.pos.X, g.player.pos.Y, 30, 30, color.White)
+	ebitenutil.DrawRect(screen, g.player.Pos.X, g.player.Pos.Y, 30, 30, color.White)
 
 	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
 	ebitenutil.DebugPrint(screen, info)
@@ -130,7 +130,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return screenWidth, screenHeight
+	return ScreenWidth, ScreenHeight
 }
 
 func main() {
@@ -147,19 +147,16 @@ func main() {
 		log.Fatalln("Dial creation:", err)
 	}
 
-	packets.Send(conn, packets.Hello, packets.HelloPacketData{})
+	// TODO Use reliable connection
+	clientId := hello(conn)
 
-	var welcomePacket packets.Packet[packets.WelcomePacketData]
-	packets.ReceivePacket(true, conn, &welcomePacket)
-	welcomePacketData := welcomePacket.Data
-
-	log.Println("Client id", welcomePacketData.ClientId)
+	fmt.Println("Client id", clientId)
 
 	game := &Game{
-		id: welcomePacketData.ClientId,
+		id: clientId,
 		player: &Player{
-			pos:   vector.Vec2{X: 250, Y: 250},
-			state: NormalState{},
+			Pos:   vector.Vec2{X: 250, Y: 250},
+			State: NormalState{},
 		},
 		conn:             conn,
 		remotePlayers:    sync.Map{},
@@ -168,33 +165,64 @@ func main() {
 
 	ebiten.SetWindowTitle("Zbijak")
 	ebiten.SetWindowResizable(true)
-	ebiten.SetWindowSize(screenWidth, screenHeight)
+	ebiten.SetWindowSize(ScreenWidth, ScreenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(tickRate)
+	ebiten.SetMaxTPS(TickRate)
 
-	go listen(game)
+	packetListener := packets.NewPacketListener(game)
+	packetListener.Register(packets.ServerUpdate, handleServerUpdatePacket)
+	packetListener.Register(packets.ByeAck, handleByeAckPacket)
+	go packetListener.Listen(game.conn)
 
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalln(err)
 	}
+
+	// TODO find better way of waiting
+	time.Sleep(time.Millisecond * 250)
+	// TODO Use reliable connection
+	bye(game)
 }
 
-func listen(game *Game) {
-	for {
-		var serverUpdatePacket packets.Packet[packets.ServerUpdateData]
-		packets.ReceivePacket(true, game.conn, &serverUpdatePacket)
-		serverUpdateData := serverUpdatePacket.Data
+func handleServerUpdatePacket(kind packets.PacketKind, data interface{}, game interface{}) {
+	serverUpdateData := data.(packets.ServerUpdateData)
+	gameData := game.(*Game)
 
-		if game.lastServerUpdate.Before(serverUpdateData.Timestamp) {
-			game.lastServerUpdate = serverUpdateData.Timestamp
-			game.serverUpdates = append(game.serverUpdates, serverUpdateData)
+	if gameData.lastServerUpdate.Before(serverUpdateData.Timestamp) {
+		gameData.lastServerUpdate = serverUpdateData.Timestamp
+		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
 
-			for _, player := range serverUpdateData.PlayersData {
-				_, _ = game.remotePlayers.LoadOrStore(player.ClientId, &RemotePlayer{
-					pos:    player.Pos,
-					inDash: player.InDash,
-				})
-			}
+		for _, player := range serverUpdateData.PlayersData {
+			_, _ = gameData.remotePlayers.LoadOrStore(player.ClientId, &RemotePlayer{
+				pos:    player.Pos,
+				inDash: player.InDash,
+			})
 		}
 	}
+}
+
+func handleByeAckPacket(kind packets.PacketKind, data interface{}, game interface{}) {
+	byeAckData := data.(packets.ByeAckPacketData)
+	gameData := game.(*Game)
+	fmt.Println("Clientid", byeAckData.ClientId)
+	gameData.remotePlayers.Delete(byeAckData.ClientId)
+}
+
+func hello(conn *net.UDPConn) uint8 {
+	packets.Send(conn, packets.Hello, packets.HelloPacketData{})
+
+	var welcomePacket packets.Packet[packets.WelcomePacketData]
+	packets.ReceivePacket(true, conn, &welcomePacket)
+	welcomePacketData := welcomePacket.Data
+
+	return welcomePacketData.ClientId
+}
+
+func bye(game *Game) {
+	packets.Send(game.conn, packets.Bye, packets.ByePacketData{
+		ClientId: game.id,
+	})
+
+	var byeAckPacket packets.Packet[packets.ByeAckPacketData]
+	packets.ReceivePacket(true, game.conn, &byeAckPacket)
 }

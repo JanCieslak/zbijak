@@ -15,13 +15,13 @@ func (s NormalState) Update(player *Player, moveVector vector.Vec2) {
 		moveVector.Normalize()
 		moveVector.Mul(dashSpeed)
 
-		player.state = DashState{
+		player.State = DashState{
 			startTime:  time.Now(),
 			dashVector: moveVector,
 		}
 	}
 
 	moveVector.Normalize()
-	moveVector.Mul(speed)
-	player.pos.AddVec(moveVector)
+	moveVector.Mul(Speed)
+	player.Pos.AddVec(moveVector)
 }

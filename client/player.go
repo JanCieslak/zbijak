@@ -6,13 +6,13 @@ import (
 )
 
 type Player struct {
-	pos   vector.Vec2
-	state State
+	Pos   vector.Vec2
+	State State
 }
 
 func (p *Player) Update() {
 	moveVector := calcMoveVector()
-	p.state.Update(p, moveVector)
+	p.State.Update(p, moveVector)
 }
 
 func calcMoveVector() vector.Vec2 {

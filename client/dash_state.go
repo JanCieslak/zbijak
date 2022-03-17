@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	dashSpeed    = 2 * speed
+	dashSpeed    = 2 * Speed
 	dashDuration = 250 * time.Millisecond
 	dashCooldown = time.Second
 )
@@ -18,10 +18,10 @@ type DashState struct {
 
 func (s DashState) Update(player *Player, moveVector vector.Vec2) {
 	if time.Since(s.startTime) > dashDuration {
-		player.state = NormalState{
+		player.State = NormalState{
 			lastDashTime: time.Now(),
 		}
 	}
 
-	player.pos.AddVec(s.dashVector)
+	player.Pos.AddVec(s.dashVector)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/JanCieslak/zbijak/common/vector"
@@ -108,6 +109,24 @@ func main() {
 				inDash: playerUpdateData.InDash,
 			})
 			break
+		case packets.Bye:
+			var byePacket packets.Packet[packets.ByePacketData]
+			err = json.Unmarshal(buffer, &byePacket)
+			if err != nil {
+				log.Fatalln("Error when deserializing packet")
+			}
+			byePacketData := byePacket.Data
+
+			fmt.Println("BYE", byePacketData.ClientId)
+			s.players.Delete(byePacketData.ClientId)
+
+			s.players.Range(func(key, value any) bool {
+				player := value.(*RemotePlayer)
+				packets.SendPacketTo(packetConn, player.addr, packets.ByeAck, packets.ByeAckPacketData{
+					ClientId: byePacketData.ClientId,
+				})
+				return true
+			})
 		default:
 			log.Fatalln("Something went wrong")
 		}
