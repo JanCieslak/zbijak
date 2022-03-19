@@ -3,6 +3,13 @@ package main
 import (
 	"github.com/JanCieslak/zbijak/common/vector"
 	"github.com/hajimehoshi/ebiten/v2"
+	"time"
+)
+
+const (
+	DefaultSpeed       = 2.5
+	FullChargeSpeed    = 0.5
+	FullChargeDuration = 500 * time.Millisecond
 )
 
 type Player struct {
@@ -11,11 +18,6 @@ type Player struct {
 }
 
 func (p *Player) Update() {
-	moveVector := calcMoveVector()
-	p.State.Update(p, moveVector)
-}
-
-func calcMoveVector() vector.Vec2 {
 	moveVector := vector.Vec2{}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
@@ -31,5 +33,5 @@ func calcMoveVector() vector.Vec2 {
 		moveVector.Add(0, 1)
 	}
 
-	return moveVector
+	p.State.Update(p, moveVector)
 }

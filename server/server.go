@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
@@ -17,6 +16,7 @@ import (
 type Server struct {
 	players      sync.Map
 	nextClientId uint32
+	conn         *net.UDPConn
 }
 
 type RemotePlayer struct {
@@ -30,16 +30,22 @@ func main() {
 	log.SetOutput(ioutil.Discard)
 
 	// TODO Changge to UDPConn (it implements ListenPacket)
-	packetConn, err := net.ListenPacket("udp", ":8083")
+	serverAddress, err := net.ResolveUDPAddr("udp", ":8083")
 	if err != nil {
-		log.Fatalln("PacketConn error", err)
+		log.Fatalln("Udp address:", err)
+	}
+
+	conn, err := net.ListenUDP("udp", serverAddress)
+	if err != nil {
+		log.Fatalln("Dial creation:", err)
 	}
 
 	log.Println("Listening on: 8083")
 
-	s := Server{
+	server := &Server{
 		players:      sync.Map{},
 		nextClientId: 0,
+		conn:         conn,
 	}
 
 	go func() {
@@ -49,7 +55,7 @@ func main() {
 			start := time.Now()
 			players := map[uint8]packets.PlayerData{}
 
-			s.players.Range(func(key, value any) bool {
+			server.players.Range(func(key, value any) bool {
 				clientId := key.(uint8)
 				player := value.(*RemotePlayer)
 
@@ -65,10 +71,10 @@ func main() {
 			if len(players) > 0 {
 				timeStamp := time.Now()
 
-				s.players.Range(func(key, value any) bool {
+				server.players.Range(func(key, value any) bool {
 					player := value.(*RemotePlayer)
 					log.Println("Sending server update with players:", players)
-					packets.SendPacketTo(packetConn, player.addr, packets.ServerUpdate, packets.ServerUpdateData{
+					packets.SendPacketTo(conn, player.addr, packets.ServerUpdate, packets.ServerUpdatePacketData{
 						PlayersData: players,
 						Timestamp:   timeStamp,
 					})
@@ -82,53 +88,44 @@ func main() {
 		}
 	}()
 
-	for {
-		remoteAddr, buffer := packets.ReceivePacketWithAddr(packetConn)
+	packetListener := packets.NewPacketListener(server)
+	packetListener.Register(packets.Hello, handleHelloPacket)
+	packetListener.Register(packets.PlayerUpdate, handlePlayerUpdatePacket)
+	packetListener.Register(packets.Bye, handleByePacket)
+	packetListener.Listen(server.conn)
+}
 
-		packetKind := packets.PacketKindFromBytes(buffer)
-		log.Println("Received packet of type:", packetKind)
+func handleHelloPacket(kind packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
+	serverData := server.(*Server)
+	packets.SendPacketTo(serverData.conn, addr, packets.Welcome, packets.WelcomePacketData{
+		ClientId: uint8(serverData.nextClientId),
+	})
+	atomic.AddUint32(&serverData.nextClientId, 1)
+}
 
-		switch packetKind {
-		case packets.Hello:
-			packets.SendPacketTo(packetConn, remoteAddr, packets.Welcome, packets.WelcomePacketData{
-				ClientId: uint8(s.nextClientId),
-			})
-			atomic.AddUint32(&s.nextClientId, 1)
-			break
-		case packets.PlayerUpdate:
-			var playerUpdatePacket packets.Packet[packets.PlayerUpdateData]
-			err = json.Unmarshal(buffer, &playerUpdatePacket)
-			if err != nil {
-				log.Fatalln("Error when deserializing packet")
-			}
-			playerUpdateData := playerUpdatePacket.Data
+func handlePlayerUpdatePacket(kind packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
+	playerUpdatePacketData := data.(packets.PlayerUpdatePacketData)
+	serverData := server.(*Server)
 
-			s.players.Store(playerUpdateData.ClientId, &RemotePlayer{
-				addr:   remoteAddr,
-				pos:    playerUpdateData.Pos,
-				inDash: playerUpdateData.InDash,
-			})
-			break
-		case packets.Bye:
-			var byePacket packets.Packet[packets.ByePacketData]
-			err = json.Unmarshal(buffer, &byePacket)
-			if err != nil {
-				log.Fatalln("Error when deserializing packet")
-			}
-			byePacketData := byePacket.Data
+	serverData.players.Store(playerUpdatePacketData.ClientId, &RemotePlayer{
+		addr:   addr,
+		pos:    playerUpdatePacketData.Pos,
+		inDash: playerUpdatePacketData.InDash,
+	})
+}
 
-			fmt.Println("BYE", byePacketData.ClientId)
-			s.players.Delete(byePacketData.ClientId)
+func handleByePacket(kind packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
+	byePacketData := data.(packets.ByePacketData)
+	serverData := server.(*Server)
 
-			s.players.Range(func(key, value any) bool {
-				player := value.(*RemotePlayer)
-				packets.SendPacketTo(packetConn, player.addr, packets.ByeAck, packets.ByeAckPacketData{
-					ClientId: byePacketData.ClientId,
-				})
-				return true
-			})
-		default:
-			log.Fatalln("Something went wrong")
-		}
-	}
+	fmt.Println("BYE", byePacketData.ClientId)
+	serverData.players.Delete(byePacketData.ClientId)
+
+	serverData.players.Range(func(key, value any) bool {
+		player := value.(*RemotePlayer)
+		packets.SendPacketTo(serverData.conn, player.addr, packets.ByeAck, packets.ByeAckPacketData{
+			ClientId: byePacketData.ClientId,
+		})
+		return true
+	})
 }

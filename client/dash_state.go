@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	dashSpeed    = 2 * Speed
+	dashSpeed    = 2 * DefaultSpeed
 	dashDuration = 250 * time.Millisecond
 	dashCooldown = time.Second
 )

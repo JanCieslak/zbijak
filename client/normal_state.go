@@ -22,6 +22,6 @@ func (s NormalState) Update(player *Player, moveVector vector.Vec2) {
 	}
 
 	moveVector.Normalize()
-	moveVector.Mul(Speed)
+	moveVector.Mul(DefaultSpeed)
 	player.Pos.AddVec(moveVector)
 }

@@ -20,7 +20,6 @@ const (
 	ScreenWidth         = 640
 	ScreenHeight        = 480
 	TickRate            = 144
-	Speed               = 2.5
 	InterpolationOffset = 100
 )
 
@@ -36,13 +35,13 @@ type Game struct {
 	remotePlayers sync.Map     // TODO Abstract - World
 
 	lastServerUpdate time.Time
-	serverUpdates    []packets.ServerUpdateData
+	serverUpdates    []packets.ServerUpdatePacketData
 }
 
 func (g *Game) Update() error {
 	g.player.Update()
 
-	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdateData{
+	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdatePacketData{
 		ClientId: g.id,
 		Pos:      g.player.Pos,
 		InDash:   reflect.TypeOf(g.player.State) == reflect.TypeOf(DashState{}),
@@ -105,6 +104,7 @@ func Lerp(start, end, p float64) float64 {
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
+	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
 	ebitenutil.DrawRect(screen, g.player.Pos.X, g.player.Pos.Y, 30, 30, color.White)
 
 	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
@@ -178,14 +178,15 @@ func main() {
 		log.Fatalln(err)
 	}
 
+	packetListener.ShutDown()
 	// TODO find better way of waiting
 	time.Sleep(time.Millisecond * 250)
 	// TODO Use reliable connection
 	bye(game)
 }
 
-func handleServerUpdatePacket(kind packets.PacketKind, data interface{}, game interface{}) {
-	serverUpdateData := data.(packets.ServerUpdateData)
+func handleServerUpdatePacket(kind packets.PacketKind, addr net.Addr, data interface{}, game interface{}) {
+	serverUpdateData := data.(packets.ServerUpdatePacketData)
 	gameData := game.(*Game)
 
 	if gameData.lastServerUpdate.Before(serverUpdateData.Timestamp) {
@@ -201,7 +202,7 @@ func handleServerUpdatePacket(kind packets.PacketKind, data interface{}, game in
 	}
 }
 
-func handleByeAckPacket(kind packets.PacketKind, data interface{}, game interface{}) {
+func handleByeAckPacket(kind packets.PacketKind, addr net.Addr, data interface{}, game interface{}) {
 	byeAckData := data.(packets.ByeAckPacketData)
 	gameData := game.(*Game)
 	fmt.Println("Clientid", byeAckData.ClientId)

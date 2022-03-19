@@ -3,63 +3,9 @@ package packets
 import (
 	"encoding/binary"
 	"encoding/json"
-	"github.com/JanCieslak/zbijak/common/vector"
 	"log"
 	"net"
-	"sync/atomic"
-	"time"
 )
-
-type PacketKind uint8
-
-const (
-	Hello PacketKind = iota
-	Welcome
-	PlayerUpdate
-	ServerUpdate
-	Bye
-	ByeAck
-)
-
-type HelloPacketData struct{}
-
-type WelcomePacketData struct {
-	ClientId uint8
-}
-
-type PlayerUpdateData struct {
-	ClientId uint8
-	Pos      vector.Vec2
-	InDash   bool
-}
-
-type PlayerData struct {
-	ClientId uint8
-	Pos      vector.Vec2
-	InDash   bool
-}
-
-type ServerUpdateData struct {
-	PlayersData map[uint8]PlayerData
-	Timestamp   time.Time
-}
-
-type ByePacketData struct {
-	ClientId uint8
-}
-
-type ByeAckPacketData struct {
-	ClientId uint8
-}
-
-type PacketData interface {
-	HelloPacketData | WelcomePacketData | PlayerUpdateData | ServerUpdateData | ByePacketData | ByeAckPacketData
-}
-
-type Packet[T PacketData] struct {
-	Kind PacketKind
-	Data T
-}
 
 func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
 	buffer := make([]byte, 512)
@@ -154,78 +100,4 @@ func PacketKindFromBytes(bytes []byte) PacketKind {
 		log.Fatalln("Error when deserializing packet")
 	}
 	return packet.Kind
-}
-
-type AtomicBool struct {
-	value int32
-}
-
-func (b *AtomicBool) Set(value bool) {
-	var i int32 = 0
-	if value {
-		i = 1
-	}
-	atomic.StoreInt32(&b.value, i)
-}
-
-func (b *AtomicBool) Get() bool {
-	if atomic.LoadInt32(&b.value) != 0 {
-		return true
-	}
-	return false
-}
-
-type PacketListenerCallback = func(kind PacketKind, data interface{}, customData interface{})
-
-type PacketListener struct {
-	shouldListen *AtomicBool
-	callbacks    map[PacketKind]PacketListenerCallback
-	customData   interface{}
-}
-
-func NewPacketListener(customData interface{}) PacketListener {
-	return PacketListener{
-		shouldListen: &AtomicBool{
-			value: 1,
-		},
-		callbacks:  make(map[PacketKind]PacketListenerCallback),
-		customData: customData,
-	}
-}
-
-func (packetListener *PacketListener) Register(kind PacketKind, callback PacketListenerCallback) {
-	packetListener.callbacks[kind] = callback
-}
-
-func (packetListener *PacketListener) Listen(conn *net.UDPConn) {
-	for packetListener.shouldListen.Get() {
-		_, buffer := ReceivePacketWithAddr(conn)
-		kind := PacketKindFromBytes(buffer)
-		callback, ok := packetListener.callbacks[kind]
-		if !ok {
-			log.Fatalf("Kind: %s not defined in callbacks\n", string(kind))
-		}
-
-		switch kind {
-		case ServerUpdate:
-			var packet Packet[ServerUpdateData]
-			unmarshalPacket(buffer, &packet)
-			packetData := packet.Data
-			callback(kind, packetData, packetListener.customData)
-			break
-		case ByeAck:
-			var packet Packet[ByeAckPacketData]
-			unmarshalPacket(buffer, &packet)
-			packetData := packet.Data
-			callback(kind, packetData, packetListener.customData)
-			break
-		}
-	}
-}
-
-func unmarshalPacket[T PacketData](buffer []byte, packet *Packet[T]) {
-	err := json.Unmarshal(buffer, &packet)
-	if err != nil {
-		log.Fatalln("Error when deserializing packet")
-	}
 }
