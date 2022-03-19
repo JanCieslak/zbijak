@@ -119,13 +119,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	})
 }
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
+func (g *Game) Layout(_, _ int) (int, int) {
 	return constants.ScreenWidth, constants.ScreenHeight
 }
 
 func main() {
 	log.SetPrefix("Client - ")
-	//log.SetOutput(ioutil.Discard)
 
 	serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
 	if err != nil {
@@ -172,7 +171,7 @@ func main() {
 	bye(game)
 }
 
-func handleServerUpdatePacket(kind packets.PacketKind, addr net.Addr, data interface{}, game interface{}) {
+func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}, game interface{}) {
 	serverUpdateData := data.(packets.ServerUpdatePacketData)
 	gameData := game.(*Game)
 
@@ -189,10 +188,10 @@ func handleServerUpdatePacket(kind packets.PacketKind, addr net.Addr, data inter
 	}
 }
 
-func handleByeAckPacket(kind packets.PacketKind, addr net.Addr, data interface{}, game interface{}) {
+func handleByeAckPacket(_ packets.PacketKind, _ net.Addr, data interface{}, game interface{}) {
 	byeAckData := data.(packets.ByeAckPacketData)
 	gameData := game.(*Game)
-	fmt.Println("Clientid", byeAckData.ClientId)
+	fmt.Println("ClientId", byeAckData.ClientId)
 	gameData.remotePlayers.Delete(byeAckData.ClientId)
 }
 

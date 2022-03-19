@@ -29,7 +29,7 @@ func main() {
 	log.SetPrefix("Server - ")
 	log.SetOutput(ioutil.Discard)
 
-	// TODO Changge to UDPConn (it implements ListenPacket)
+	// TODO Change to UDPConn (it implements ListenPacket)
 	serverAddress, err := net.ResolveUDPAddr("udp", ":8083")
 	if err != nil {
 		log.Fatalln("Udp address:", err)
@@ -95,7 +95,7 @@ func main() {
 	packetListener.Listen(server.conn)
 }
 
-func handleHelloPacket(kind packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
+func handleHelloPacket(_ packets.PacketKind, addr net.Addr, _ interface{}, server interface{}) {
 	serverData := server.(*Server)
 	packets.SendPacketTo(serverData.conn, addr, packets.Welcome, packets.WelcomePacketData{
 		ClientId: uint8(serverData.nextClientId),
@@ -103,7 +103,7 @@ func handleHelloPacket(kind packets.PacketKind, addr net.Addr, data interface{},
 	atomic.AddUint32(&serverData.nextClientId, 1)
 }
 
-func handlePlayerUpdatePacket(kind packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
+func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
 	playerUpdatePacketData := data.(packets.PlayerUpdatePacketData)
 	serverData := server.(*Server)
 
@@ -114,7 +114,7 @@ func handlePlayerUpdatePacket(kind packets.PacketKind, addr net.Addr, data inter
 	})
 }
 
-func handleByePacket(kind packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
+func handleByePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server interface{}) {
 	byePacketData := data.(packets.ByePacketData)
 	serverData := server.(*Server)
 
