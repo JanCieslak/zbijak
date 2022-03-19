@@ -1,5 +1,8 @@
 package constants
 
 const (
-	ServerTickRate = 144
+	ScreenWidth         = 640
+	ScreenHeight        = 480
+	TickRate            = 144
+	InterpolationOffset = 100
 )

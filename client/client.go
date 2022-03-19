@@ -2,25 +2,19 @@ package main
 
 import (
 	"fmt"
+	"github.com/JanCieslak/Zbijak/client/player"
+	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/JanCieslak/zbijak/common/vector"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"golang.org/x/image/math/f64"
 	"image/color"
-	"io/ioutil"
 	"log"
 	"net"
 	"reflect"
 	"sync"
 	"time"
-)
-
-const (
-	ScreenWidth         = 640
-	ScreenHeight        = 480
-	TickRate            = 144
-	InterpolationOffset = 100
 )
 
 type RemotePlayer struct {
@@ -30,7 +24,7 @@ type RemotePlayer struct {
 
 type Game struct {
 	id            uint8
-	player        *Player
+	player        *player.Player
 	conn          *net.UDPConn // TODO Abstract - NetworkManager
 	remotePlayers sync.Map     // TODO Abstract - World
 
@@ -44,10 +38,10 @@ func (g *Game) Update() error {
 	packets.Send(g.conn, packets.PlayerUpdate, packets.PlayerUpdatePacketData{
 		ClientId: g.id,
 		Pos:      g.player.Pos,
-		InDash:   reflect.TypeOf(g.player.State) == reflect.TypeOf(DashState{}),
+		InDash:   reflect.TypeOf(g.player.MovementState) == reflect.TypeOf(player.DashMovementState{}),
 	})
 
-	renderTime := time.Now().Add(-InterpolationOffset * time.Millisecond)
+	renderTime := time.Now().Add(-constants.InterpolationOffset * time.Millisecond)
 	if len(g.serverUpdates) > 1 {
 		for len(g.serverUpdates) > 2 && renderTime.After(g.serverUpdates[1].Timestamp) {
 			g.serverUpdates = append(g.serverUpdates[:0], g.serverUpdates[1:]...)
@@ -64,8 +58,8 @@ func (g *Game) Update() error {
 				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
 
 				if ok0 && ok1 {
-					newX := Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
-					newY := Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
+					newX := packets.Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
+					newY := packets.Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
 
 					remotePlayer.pos.Set(newX, newY)
 				}
@@ -99,10 +93,6 @@ func (g *Game) Update() error {
 	return nil
 }
 
-func Lerp(start, end, p float64) float64 {
-	return start + (end-start)*p
-}
-
 func (g *Game) Draw(screen *ebiten.Image) {
 	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
 	ebitenutil.DrawRect(screen, g.player.Pos.X, g.player.Pos.Y, 30, 30, color.White)
@@ -111,11 +101,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrint(screen, info)
 
 	for _, update := range g.serverUpdates {
-		for _, player := range update.PlayersData {
-			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y, player.Pos.X+30, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y, player.Pos.X+30, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.Pos.X+30, player.Pos.Y+30, player.Pos.X, player.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
-			ebitenutil.DrawLine(screen, player.Pos.X, player.Pos.Y+30, player.Pos.X, player.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+		for _, p := range update.PlayersData {
+			ebitenutil.DrawLine(screen, p.Pos.X, p.Pos.Y, p.Pos.X+30, p.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, p.Pos.X+30, p.Pos.Y, p.Pos.X+30, p.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, p.Pos.X+30, p.Pos.Y+30, p.Pos.X, p.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, p.Pos.X, p.Pos.Y+30, p.Pos.X, p.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
 		}
 	}
 
@@ -130,12 +120,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return ScreenWidth, ScreenHeight
+	return constants.ScreenWidth, constants.ScreenHeight
 }
 
 func main() {
 	log.SetPrefix("Client - ")
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 
 	serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
 	if err != nil {
@@ -153,11 +143,8 @@ func main() {
 	fmt.Println("Client id", clientId)
 
 	game := &Game{
-		id: clientId,
-		player: &Player{
-			Pos:   vector.Vec2{X: 250, Y: 250},
-			State: NormalState{},
-		},
+		id:               clientId,
+		player:           player.NewPlayer(),
 		conn:             conn,
 		remotePlayers:    sync.Map{},
 		lastServerUpdate: time.Now(),
@@ -165,9 +152,9 @@ func main() {
 
 	ebiten.SetWindowTitle("Zbijak")
 	ebiten.SetWindowResizable(true)
-	ebiten.SetWindowSize(ScreenWidth, ScreenHeight)
+	ebiten.SetWindowSize(constants.ScreenWidth, constants.ScreenHeight)
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
-	ebiten.SetMaxTPS(TickRate)
+	ebiten.SetMaxTPS(constants.TickRate)
 
 	packetListener := packets.NewPacketListener(game)
 	packetListener.Register(packets.ServerUpdate, handleServerUpdatePacket)
@@ -193,10 +180,10 @@ func handleServerUpdatePacket(kind packets.PacketKind, addr net.Addr, data inter
 		gameData.lastServerUpdate = serverUpdateData.Timestamp
 		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
 
-		for _, player := range serverUpdateData.PlayersData {
-			_, _ = gameData.remotePlayers.LoadOrStore(player.ClientId, &RemotePlayer{
-				pos:    player.Pos,
-				inDash: player.InDash,
+		for _, p := range serverUpdateData.PlayersData {
+			_, _ = gameData.remotePlayers.LoadOrStore(p.ClientId, &RemotePlayer{
+				pos:    p.Pos,
+				inDash: p.InDash,
 			})
 		}
 	}

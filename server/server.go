@@ -49,7 +49,7 @@ func main() {
 	}
 
 	go func() {
-		tickTime := time.Second / constants.ServerTickRate
+		tickTime := time.Second / constants.TickRate
 
 		for {
 			start := time.Now()

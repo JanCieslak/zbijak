@@ -10,7 +10,7 @@ import (
 func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
 	buffer := make([]byte, 512)
 
-	log.Printf("[%v] Receiving packet...", conn.LocalAddr())
+	//log.Printf("[%v] Receiving packet...", conn.LocalAddr())
 	_, addr, err := conn.ReadFrom(buffer)
 	if err != nil {
 		log.Fatalln("Error when reading packet:", err)
@@ -59,7 +59,7 @@ func Send[T PacketData](conn *net.UDPConn, packetKind PacketKind, packetData T) 
 func ReceivePacket[T PacketData](client bool, conn *net.UDPConn, packet *Packet[T]) {
 	buffer := make([]byte, 512)
 
-	log.Printf("[%v] Receiving packet...", conn.LocalAddr())
+	//log.Printf("[%v] Receiving packet...", conn.LocalAddr())
 	if client {
 		_, err := conn.Read(buffer)
 		if err != nil {
@@ -100,4 +100,8 @@ func PacketKindFromBytes(bytes []byte) PacketKind {
 		log.Fatalln("Error when deserializing packet")
 	}
 	return packet.Kind
+}
+
+func Lerp(start, end, p float64) float64 {
+	return start + (end-start)*p
 }
