@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/JanCieslak/Zbijak/client/ball"
 	"github.com/JanCieslak/Zbijak/client/player"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
@@ -27,6 +28,7 @@ type Game struct {
 	player        *player.Player
 	conn          *net.UDPConn // TODO Abstract - NetworkManager
 	remotePlayers sync.Map     // TODO Abstract - World
+	remoteBalls   sync.Map
 
 	lastServerUpdate time.Time
 	serverUpdates    []packets.ServerUpdatePacketData
@@ -101,6 +103,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrint(screen, info)
 
 	for _, update := range g.serverUpdates {
+		for _, b := range update.Balls {
+			ebitenutil.DrawLine(screen, b.Pos.X, b.Pos.Y, b.Pos.X+10, b.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, b.Pos.X+10, b.Pos.Y, b.Pos.X+10, b.Pos.Y+10, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, b.Pos.X+10, b.Pos.Y+10, b.Pos.X, b.Pos.Y+10, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+			ebitenutil.DrawLine(screen, b.Pos.X, b.Pos.Y+10, b.Pos.X, b.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+		}
 		for _, p := range update.PlayersData {
 			ebitenutil.DrawLine(screen, p.Pos.X, p.Pos.Y, p.Pos.X+30, p.Pos.Y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
 			ebitenutil.DrawLine(screen, p.Pos.X+30, p.Pos.Y, p.Pos.X+30, p.Pos.Y+30, color.RGBA{R: 255, G: 255, B: 255, A: 100})
@@ -143,9 +151,10 @@ func main() {
 
 	game := &Game{
 		id:               clientId,
-		player:           player.NewPlayer(),
+		player:           player.NewPlayer(250, 250), // TODO Get from the server ?
 		conn:             conn,
 		remotePlayers:    sync.Map{},
+		remoteBalls:      sync.Map{},
 		lastServerUpdate: time.Now(),
 	}
 
@@ -178,6 +187,12 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 	if gameData.lastServerUpdate.Before(serverUpdateData.Timestamp) {
 		gameData.lastServerUpdate = serverUpdateData.Timestamp
 		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
+
+		for _, b := range serverUpdateData.Balls {
+			_, _ = gameData.remoteBalls.LoadOrStore(0, ball.Ball{
+				Pos: b.Pos,
+			})
+		}
 
 		for _, p := range serverUpdateData.PlayersData {
 			_, _ = gameData.remotePlayers.LoadOrStore(p.ClientId, &RemotePlayer{

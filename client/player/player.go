@@ -24,12 +24,14 @@ type Player struct {
 	PlayerState   State
 }
 
-func NewPlayer() *Player {
+func NewPlayer(x, y float64) *Player {
 	return &Player{
-		Pos:           vector.Vec2{X: 250, Y: 250},
-		Velocity:      vector.Vec2{},
-		MovementState: NormalMovementState{},
-		PlayerState:   NormalPlayerState{},
+		Pos:      vector.Vec2{X: x, Y: y},
+		Velocity: vector.Vec2{},
+		MovementState: NormalMovementState{
+			lastDashTime: time.Now().Add(-DashCooldown),
+		},
+		PlayerState: NormalPlayerState{},
 	}
 }
 

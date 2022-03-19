@@ -17,12 +17,19 @@ type Server struct {
 	players      sync.Map
 	nextClientId uint32
 	conn         *net.UDPConn
+	balls        []RemoteBall
 }
 
 type RemotePlayer struct {
-	addr   net.Addr
-	pos    vector.Vec2
-	inDash bool
+	clientId uint8
+	addr     net.Addr
+	pos      vector.Vec2
+	inDash   bool
+}
+
+type RemoteBall struct {
+	pos   vector.Vec2
+	owner *RemotePlayer
 }
 
 func main() {
@@ -42,10 +49,17 @@ func main() {
 
 	log.Println("Listening on: 8083")
 
+	balls := make([]RemoteBall, 0)
+	balls = append(balls, RemoteBall{
+		pos:   vector.Vec2{X: 300, Y: 300},
+		owner: nil,
+	})
+
 	server := &Server{
 		players:      sync.Map{},
 		nextClientId: 0,
 		conn:         conn,
+		balls:        balls,
 	}
 
 	go func() {
@@ -71,13 +85,24 @@ func main() {
 			if len(players) > 0 {
 				timeStamp := time.Now()
 
+				ballsData := make([]packets.BallData, 0)
+
+				for _, ball := range server.balls {
+					ballsData = append(ballsData, packets.BallData{
+						Owner: 0, // TODO
+						Pos:   ball.pos,
+					})
+				}
+
 				server.players.Range(func(key, value any) bool {
 					player := value.(*RemotePlayer)
-					log.Println("Sending server update with players:", players)
+
 					packets.SendPacketTo(conn, player.addr, packets.ServerUpdate, packets.ServerUpdatePacketData{
 						PlayersData: players,
+						Balls:       ballsData,
 						Timestamp:   timeStamp,
 					})
+
 					return true
 				})
 			}
@@ -108,9 +133,10 @@ func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interfac
 	serverData := server.(*Server)
 
 	serverData.players.Store(playerUpdatePacketData.ClientId, &RemotePlayer{
-		addr:   addr,
-		pos:    playerUpdatePacketData.Pos,
-		inDash: playerUpdatePacketData.InDash,
+		clientId: playerUpdatePacketData.ClientId,
+		addr:     addr,
+		pos:      playerUpdatePacketData.Pos,
+		inDash:   playerUpdatePacketData.InDash,
 	})
 }
 

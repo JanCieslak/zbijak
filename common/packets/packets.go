@@ -34,8 +34,14 @@ type PlayerData struct {
 	InDash   bool
 }
 
+type BallData struct {
+	Owner uint8
+	Pos   vector.Vec2
+}
+
 type ServerUpdatePacketData struct {
 	PlayersData map[uint8]PlayerData
+	Balls       []BallData
 	Timestamp   time.Time
 }
 
