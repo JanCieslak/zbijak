@@ -1,0 +1,255 @@
+package game
+
+import (
+	"bufio"
+	"fmt"
+	"github.com/JanCieslak/zbijak/common/constants"
+	"github.com/JanCieslak/zbijak/common/packets"
+	"github.com/JanCieslak/zbijak/common/vec"
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"golang.org/x/image/math/f64"
+	"image"
+	"image/color"
+	_ "image/png"
+	"log"
+	"net"
+	"os"
+	"reflect"
+	"sync"
+	"time"
+)
+
+type RemotePlayer struct {
+	pos    vec.Vec2
+	inDash bool
+}
+
+type Game struct {
+	Id            uint8
+	Player        *Player
+	Conn          *net.UDPConn // TODO Abstract - NetworkManager
+	RemotePlayers sync.Map     // TODO Abstract - World
+	RemoteBalls   sync.Map
+
+	LastServerUpdate time.Time
+	serverUpdates    []packets.ServerUpdatePacketData
+	PacketListener   packets.PacketListener
+}
+
+func (g *Game) Update() error {
+	g.Player.Update(g)
+
+	packets.Send(g.Conn, packets.PlayerUpdate, packets.PlayerUpdatePacketData{
+		ClientId: g.Id,
+		Pos:      g.Player.Pos,
+		InDash:   reflect.TypeOf(g.Player.MovementState) == reflect.TypeOf(DashMovementState{}),
+	})
+
+	renderTime := time.Now().Add(-constants.InterpolationOffset * time.Millisecond)
+	if len(g.serverUpdates) > 1 {
+		for len(g.serverUpdates) > 2 && renderTime.After(g.serverUpdates[1].Timestamp) {
+			g.serverUpdates = append(g.serverUpdates[:0], g.serverUpdates[1:]...)
+		}
+
+		// Interpolation
+		if len(g.serverUpdates) > 2 {
+			interpolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) / float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())
+			g.RemotePlayers.Range(func(key, value any) bool {
+				clientId := key.(uint8)
+				remotePlayer := value.(*RemotePlayer)
+
+				playerOne, ok0 := g.serverUpdates[0].PlayersData[clientId]
+				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
+
+				if ok0 && ok1 {
+					newX := packets.Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
+					newY := packets.Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
+
+					remotePlayer.pos.Set(newX, newY)
+				}
+
+				return true
+			})
+			// Extrapolation TODO Test
+		} else if renderTime.After(g.serverUpdates[1].Timestamp) {
+			fmt.Println("HEY") // TODO not calling
+			extrapolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())/float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) - 1.0
+			g.RemotePlayers.Range(func(key, value any) bool {
+				clientId := key.(uint8)
+				remotePlayer := value.(*RemotePlayer)
+
+				playerOne, ok0 := g.serverUpdates[0].PlayersData[clientId]
+				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
+
+				if ok0 && ok1 {
+					positionDelta := f64.Vec2{playerTwo.Pos.X - playerOne.Pos.X, playerTwo.Pos.Y - playerOne.Pos.Y}
+					newX := playerTwo.Pos.X + (positionDelta[0] * extrapolationFactor)
+					newY := playerTwo.Pos.Y + (positionDelta[1] * extrapolationFactor)
+
+					remotePlayer.pos.Set(newX, newY)
+				}
+
+				return true
+			})
+		}
+	}
+
+	return nil
+}
+
+var (
+	circleOutlineImage *ebiten.Image
+	circleImage        *ebiten.Image
+)
+
+func init() {
+	circleOutlineImage = loadImage("resources/circle.png", 0.1)
+	circleImage = loadImage("resources/filled_circle.png", 1.0)
+}
+
+func loadImage(path string, alpha float64) *ebiten.Image {
+	f, err := os.Open(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	img, _, err := image.Decode(bufio.NewReader(f))
+	if err != nil {
+		log.Fatal(err)
+	}
+	origEbitenImage := ebiten.NewImageFromImage(img)
+
+	w, h := origEbitenImage.Size()
+	ebitenImage := ebiten.NewImage(w, h)
+
+	op := &ebiten.DrawImageOptions{}
+	op.ColorM.Scale(1, 1, 1, alpha)
+	ebitenImage.DrawImage(origEbitenImage, op)
+
+	return ebitenImage
+}
+
+func (g *Game) Draw(screen *ebiten.Image) {
+	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
+
+	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
+	ebitenutil.DebugPrint(screen, info)
+
+	for _, update := range g.serverUpdates {
+		for _, b := range update.Balls {
+			value, ok := g.RemotePlayers.Load(b.Owner)
+			if ok {
+				ballOwner := value.(*RemotePlayer)
+
+				if g.Id == b.Owner {
+					// TODO Add another image for ball
+					drawCircle(screen, g.Player.Pos.X-30, g.Player.Pos.Y+10, 0.5)
+				} else {
+					drawCircle(screen, ballOwner.pos.X-30, ballOwner.pos.Y+10, 0.5)
+				}
+			} else {
+				drawCircle(screen, b.Pos.X, b.Pos.Y, 0.5)
+			}
+		}
+		for _, p := range update.PlayersData {
+			drawCircleOutline(screen, p.Pos.X, p.Pos.Y)
+		}
+	}
+
+	g.RemotePlayers.Range(func(key, value any) bool {
+		clientId := key.(uint8)
+		remotePlayer := value.(*RemotePlayer)
+		if clientId != g.Id {
+			drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1)
+		}
+		return true
+	})
+
+	drawCircle(screen, g.Player.Pos.X, g.Player.Pos.Y, 1)
+}
+
+func drawCircle(screen *ebiten.Image, x, y, s float64) {
+	op := ebiten.DrawImageOptions{}
+	op.GeoM.Scale(s, s)
+	op.GeoM.Translate(x, y)
+	screen.DrawImage(circleImage, &op)
+}
+
+func drawCircleOutline(screen *ebiten.Image, x, y float64) {
+	op := ebiten.DrawImageOptions{}
+	op.GeoM.Translate(x, y)
+	screen.DrawImage(circleOutlineImage, &op)
+}
+
+func drawRectOutline(screen *ebiten.Image, x, y, w, h float64) {
+	ebitenutil.DrawLine(screen, x, y, x+w, y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	ebitenutil.DrawLine(screen, x+w, y, x+w, y+h, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	ebitenutil.DrawLine(screen, x+w, y+h, x, y+h, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+	ebitenutil.DrawLine(screen, x, y+h, x, y, color.RGBA{R: 255, G: 255, B: 255, A: 100})
+}
+
+func (g *Game) Layout(_, _ int) (int, int) {
+	return constants.ScreenWidth, constants.ScreenHeight
+}
+
+func (g *Game) RegisterCallbacks() {
+	g.PacketListener.Register(packets.ServerUpdate, handleServerUpdatePacket)
+	g.PacketListener.Register(packets.ByeAck, handleByeAckPacket)
+	go g.PacketListener.Listen(g.Conn)
+}
+
+func (g *Game) ShutDown() {
+	g.PacketListener.ShutDown()
+}
+
+func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}, game interface{}) {
+	serverUpdateData := data.(packets.ServerUpdatePacketData)
+	gameData := game.(*Game)
+
+	if gameData.LastServerUpdate.Before(serverUpdateData.Timestamp) {
+		gameData.LastServerUpdate = serverUpdateData.Timestamp
+		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
+
+		for _, b := range serverUpdateData.Balls {
+			_, _ = gameData.RemoteBalls.LoadOrStore(0, &Ball{ // TODO Hardcoded
+				Id:      0, // TODO Hardcoded
+				OwnerId: 0,
+				Pos:     b.Pos,
+			})
+		}
+
+		for _, p := range serverUpdateData.PlayersData {
+			_, _ = gameData.RemotePlayers.LoadOrStore(p.ClientId, &RemotePlayer{
+				pos:    p.Pos,
+				inDash: p.InDash,
+			})
+		}
+	}
+}
+
+func handleByeAckPacket(_ packets.PacketKind, _ net.Addr, data interface{}, game interface{}) {
+	byeAckData := data.(packets.ByeAckPacketData)
+	gameData := game.(*Game)
+	fmt.Println("ClientId", byeAckData.ClientId)
+	gameData.RemotePlayers.Delete(byeAckData.ClientId)
+}
+
+func Hello(conn *net.UDPConn) uint8 {
+	packets.Send(conn, packets.Hello, packets.HelloPacketData{})
+
+	var welcomePacket packets.Packet[packets.WelcomePacketData]
+	packets.ReceivePacket(true, conn, &welcomePacket)
+	welcomePacketData := welcomePacket.Data
+
+	return welcomePacketData.ClientId
+}
+
+func Bye(game *Game) {
+	packets.Send(game.Conn, packets.Bye, packets.ByePacketData{
+		ClientId: game.Id,
+	})
+
+	var byeAckPacket packets.Packet[packets.ByeAckPacketData]
+	packets.ReceivePacket(true, game.Conn, &byeAckPacket)
+}

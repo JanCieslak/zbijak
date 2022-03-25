@@ -74,12 +74,17 @@ func (packetListener *PacketListener) Listen(conn *net.UDPConn) {
 		case ServerUpdate:
 			callCallback[ServerUpdatePacketData](packetListener, addr, buffer, callback, kind)
 			break
+		case Fire:
+			callCallback[FirePacketData](packetListener, addr, buffer, callback, kind)
+			break
 		case Bye:
 			callCallback[ByePacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case ByeAck:
 			callCallback[ByeAckPacketData](packetListener, addr, buffer, callback, kind)
 			break
+		default:
+			log.Fatalln("Should define switch branch")
 		}
 	}
 }

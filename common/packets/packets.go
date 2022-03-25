@@ -1,7 +1,7 @@
 package packets
 
 import (
-	"github.com/JanCieslak/zbijak/common/vector"
+	"github.com/JanCieslak/zbijak/common/vec"
 	"time"
 )
 
@@ -12,6 +12,7 @@ const (
 	Welcome
 	PlayerUpdate
 	ServerUpdate
+	Fire
 	Bye
 	ByeAck
 )
@@ -24,25 +25,30 @@ type WelcomePacketData struct {
 
 type PlayerUpdatePacketData struct {
 	ClientId uint8
-	Pos      vector.Vec2
+	Pos      vec.Vec2
 	InDash   bool
 }
 
 type PlayerData struct {
 	ClientId uint8
-	Pos      vector.Vec2
+	Pos      vec.Vec2
 	InDash   bool
 }
 
 type BallData struct {
+	Id    uint8
 	Owner uint8
-	Pos   vector.Vec2
+	Pos   vec.Vec2
 }
 
 type ServerUpdatePacketData struct {
 	PlayersData map[uint8]PlayerData
 	Balls       []BallData
 	Timestamp   time.Time
+}
+
+type FirePacketData struct {
+	ClientId uint8
 }
 
 type ByePacketData struct {
@@ -54,7 +60,13 @@ type ByeAckPacketData struct {
 }
 
 type PacketData interface {
-	HelloPacketData | WelcomePacketData | PlayerUpdatePacketData | ServerUpdatePacketData | ByePacketData | ByeAckPacketData
+	HelloPacketData |
+		WelcomePacketData |
+		PlayerUpdatePacketData |
+		ServerUpdatePacketData |
+		FirePacketData |
+		ByePacketData |
+		ByeAckPacketData
 }
 
 type Packet[T PacketData] struct {

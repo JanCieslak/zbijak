@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
-	"github.com/JanCieslak/zbijak/common/vector"
+	"github.com/JanCieslak/zbijak/common/vec"
 	"io/ioutil"
 	"log"
 	"net"
@@ -23,13 +23,14 @@ type Server struct {
 type RemotePlayer struct {
 	clientId uint8
 	addr     net.Addr
-	pos      vector.Vec2
+	pos      vec.Vec2
 	inDash   bool
 }
 
 type RemoteBall struct {
-	pos   vector.Vec2
-	owner *RemotePlayer
+	id      uint8
+	pos     vec.Vec2
+	ownerId uint8
 }
 
 func main() {
@@ -51,8 +52,9 @@ func main() {
 
 	balls := make([]RemoteBall, 0)
 	balls = append(balls, RemoteBall{
-		pos:   vector.Vec2{X: 300, Y: 300},
-		owner: nil,
+		id:      0,
+		pos:     vec.Vec2{X: 300, Y: 300},
+		ownerId: 0,
 	})
 
 	server := &Server{
@@ -89,7 +91,8 @@ func main() {
 
 				for _, ball := range server.balls {
 					ballsData = append(ballsData, packets.BallData{
-						Owner: 0, // TODO
+						Id:    ball.id,
+						Owner: ball.ownerId,
 						Pos:   ball.pos,
 					})
 				}
@@ -117,6 +120,7 @@ func main() {
 	packetListener.Register(packets.Hello, handleHelloPacket)
 	packetListener.Register(packets.PlayerUpdate, handlePlayerUpdatePacket)
 	packetListener.Register(packets.Bye, handleByePacket)
+	packetListener.Register(packets.Fire, handleFirePacket)
 	packetListener.Listen(server.conn)
 }
 
@@ -144,7 +148,7 @@ func handleByePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server 
 	byePacketData := data.(packets.ByePacketData)
 	serverData := server.(*Server)
 
-	fmt.Println("BYE", byePacketData.ClientId)
+	log.Println("Bye:", byePacketData.ClientId)
 	serverData.players.Delete(byePacketData.ClientId)
 
 	serverData.players.Range(func(key, value any) bool {
@@ -154,4 +158,12 @@ func handleByePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server 
 		})
 		return true
 	})
+}
+
+func handleFirePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server interface{}) {
+	//firePacketData := data.(packets.FirePacketData)
+	serverData := server.(*Server)
+
+	serverData.balls[0].ownerId = 255 // TODO search ball by firePacketData ownerId
+	fmt.Println("FIRED")
 }

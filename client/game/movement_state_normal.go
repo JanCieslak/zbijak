@@ -1,4 +1,4 @@
-package player
+package game
 
 import (
 	"github.com/hajimehoshi/ebiten/v2"
@@ -9,7 +9,7 @@ type NormalMovementState struct {
 	lastDashTime time.Time
 }
 
-func (s NormalMovementState) Update(p *Player) {
+func (s NormalMovementState) Update(g *Game, p *Player) {
 	if time.Since(s.lastDashTime) > DashCooldown && ebiten.IsKeyPressed(ebiten.KeySpace) {
 		p.Velocity.Mul(DashSpeed)
 

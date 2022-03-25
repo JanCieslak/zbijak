@@ -1,7 +1,7 @@
-package player
+package game
 
 import (
-	"github.com/JanCieslak/zbijak/common/vector"
+	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"time"
 )
@@ -18,16 +18,16 @@ const (
 )
 
 type Player struct {
-	Pos           vector.Vec2
-	Velocity      vector.Vec2
+	Pos           vec.Vec2
+	Velocity      vec.Vec2
 	MovementState State
 	PlayerState   State
 }
 
 func NewPlayer(x, y float64) *Player {
 	return &Player{
-		Pos:      vector.Vec2{X: x, Y: y},
-		Velocity: vector.Vec2{},
+		Pos:      vec.Vec2{X: x, Y: y},
+		Velocity: vec.Vec2{},
 		MovementState: NormalMovementState{
 			lastDashTime: time.Now().Add(-DashCooldown),
 		},
@@ -35,8 +35,8 @@ func NewPlayer(x, y float64) *Player {
 	}
 }
 
-func (p *Player) Update() {
-	moveVector := vector.Vec2{}
+func (p *Player) Update(g *Game) {
+	moveVector := vec.Vec2{}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
 		moveVector.Add(-1, 0)
@@ -54,8 +54,8 @@ func (p *Player) Update() {
 	moveVector.Normalize()
 	p.Velocity = moveVector
 
-	p.MovementState.Update(p)
-	p.PlayerState.Update(p)
+	p.MovementState.Update(g, p)
+	p.PlayerState.Update(g, p)
 
 	p.Pos.AddVec(p.Velocity)
 }
