@@ -8,6 +8,8 @@ import (
 	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/text"
+	"golang.org/x/image/font/inconsolata"
 	"golang.org/x/image/math/f64"
 	"image"
 	"image/color"
@@ -23,12 +25,14 @@ import (
 
 type RemotePlayer struct {
 	pos      vec.Vec2
+	name     string
 	rotation float64
 	inDash   bool
 }
 
 type Game struct {
 	Id            uint8
+	Name          string
 	Player        *Player
 	Conn          *net.UDPConn // TODO Abstract - NetworkManager
 	RemotePlayers sync.Map     // TODO Abstract - World
@@ -44,6 +48,7 @@ func (g *Game) Update() error {
 
 	packets.Send(g.Conn, packets.PlayerUpdate, packets.PlayerUpdatePacketData{
 		ClientId: g.Id,
+		Name:     g.Name,
 		Pos:      g.Player.Pos,
 		Rotation: g.Player.Rotation,
 		InDash:   reflect.TypeOf(g.Player.MovementState) == reflect.TypeOf(DashMovementState{}),
@@ -164,6 +169,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.Id {
 			drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1)
+			face := inconsolata.Bold8x16
+			textBounds := text.BoundString(face, g.Name)
+			text.Draw(screen, remotePlayer.name, face, int(remotePlayer.pos.X+constants.PlayerRadius)-textBounds.Dx()/2, int(remotePlayer.pos.Y+constants.PlayerRadius)+3, color.RGBA{R: 0, G: 0, B: 0, A: 255})
 		}
 		return true
 	})
@@ -175,12 +183,12 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		if hasOwner {
 			ballOwner := remotePlayer.(*RemotePlayer)
 			if remoteBall.OwnerId == g.Id {
-				bx := g.Player.Pos.X + 15 - 7.5 + 40*math.Cos(g.Player.Rotation)
-				by := g.Player.Pos.Y + 15 - 7.5 + 40*math.Sin(g.Player.Rotation)
+				bx := g.Player.Pos.X + 16 - 8 + 40*math.Cos(g.Player.Rotation)
+				by := g.Player.Pos.Y + 16 - 8 + 40*math.Sin(g.Player.Rotation)
 				drawCircle(screen, bx, by, 0.5)
 			} else {
-				bx := ballOwner.pos.X + 15 - 7.5 + 40*math.Cos(ballOwner.rotation)
-				by := ballOwner.pos.Y + 15 - 7.5 + 40*math.Sin(ballOwner.rotation)
+				bx := ballOwner.pos.X + 16 - 8 + 40*math.Cos(ballOwner.rotation)
+				by := ballOwner.pos.Y + 16 - 8 + 40*math.Sin(ballOwner.rotation)
 				drawCircle(screen, bx, by, 0.5)
 			}
 		} else {
@@ -191,6 +199,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	ebitenutil.DrawLine(screen, 0, g.Player.Pos.Y+16, g.Player.Pos.X+16, g.Player.Pos.Y+16, color.RGBA{R: 255, G: 0, B: 0, A: 255})
 	drawCircle(screen, g.Player.Pos.X, g.Player.Pos.Y, 1)
+
+	face := inconsolata.Bold8x16
+	textBounds := text.BoundString(face, g.Name)
+	text.Draw(screen, g.Name, face, int(g.Player.Pos.X+constants.PlayerRadius)-textBounds.Dx()/2, int(g.Player.Pos.Y+constants.PlayerRadius)+3, color.RGBA{R: 0, G: 0, B: 0, A: 255})
 }
 
 func drawCircle(screen *ebiten.Image, x, y, s float64) {
@@ -247,6 +259,7 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 		for _, p := range serverUpdateData.PlayersData {
 			_, _ = gameData.RemotePlayers.LoadOrStore(p.ClientId, &RemotePlayer{
 				pos:      p.Pos,
+				name:     p.Name,
 				rotation: p.Rotation,
 				inDash:   p.InDash,
 			})

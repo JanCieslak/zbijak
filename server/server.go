@@ -26,6 +26,7 @@ type Server struct {
 
 type RemotePlayer struct {
 	clientId uint8
+	name     string
 	addr     net.Addr
 	pos      vec.Vec2
 	rotation float64
@@ -162,6 +163,7 @@ func (s *Server) SendServerUpdate() {
 
 		players[clientId] = packets.PlayerData{
 			ClientId: clientId,
+			Name:     player.name,
 			Pos:      player.pos,
 			Rotation: player.rotation,
 			InDash:   player.inDash,
@@ -213,6 +215,7 @@ func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interfac
 
 	serverData.players.Store(playerUpdatePacketData.ClientId, &RemotePlayer{
 		clientId: playerUpdatePacketData.ClientId,
+		name:     playerUpdatePacketData.Name,
 		addr:     addr,
 		pos:      playerUpdatePacketData.Pos,
 		rotation: playerUpdatePacketData.Rotation,
@@ -248,8 +251,8 @@ func handleFirePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server
 				log.Fatalf("Couldn't find player with given client id: %d from fire packet data\n", firePacketData.ClientId)
 			}
 			remotePlayer := value.(*RemotePlayer)
-			newX := remotePlayer.pos.X + 16 - 7.5 + 40*math.Cos(remotePlayer.rotation) // TODO Hardcoded
-			newY := remotePlayer.pos.Y + 16 - 7.5 + 40*math.Sin(remotePlayer.rotation)
+			newX := remotePlayer.pos.X + 16 - 8 + 40*math.Cos(remotePlayer.rotation) // TODO Hardcoded
+			newY := remotePlayer.pos.Y + 16 - 8 + 40*math.Sin(remotePlayer.rotation)
 			ball.pos.Set(newX, newY)
 
 			ball.vel = vec.NewVec2(math.Cos(remotePlayer.rotation), math.Sin(remotePlayer.rotation)).

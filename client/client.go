@@ -15,6 +15,15 @@ import (
 func main() {
 	log.SetPrefix("Client - ")
 
+	//name, ok := inputbox.InputBox("Enter your name", "Type 3 char name", "abc")
+	//if !ok {
+	//	log.Fatalln("No value entered")
+	//}
+	//if len(name) != 3 {
+	//	log.Fatalln("Name should be constructed from 3 characters")
+	//}
+	name := "jcs"
+
 	serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
 	if err != nil {
 		log.Fatalln("Udp address:", err)
@@ -32,6 +41,7 @@ func main() {
 
 	g := &game.Game{
 		Id:               clientId,
+		Name:             name,
 		Player:           game.NewPlayer(250, 250), // TODO Get from the server ?
 		Conn:             conn,
 		RemotePlayers:    sync.Map{},
