@@ -189,6 +189,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return true
 	})
 
+	ebitenutil.DrawLine(screen, 0, g.Player.Pos.Y+16, g.Player.Pos.X+16, g.Player.Pos.Y+16, color.RGBA{R: 255, G: 0, B: 0, A: 255})
 	drawCircle(screen, g.Player.Pos.X, g.Player.Pos.Y, 1)
 }
 
@@ -234,8 +235,6 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 	if gameData.LastServerUpdate.Before(serverUpdateData.Timestamp) {
 		gameData.LastServerUpdate = serverUpdateData.Timestamp
 		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
-
-		fmt.Println(serverUpdateData.Balls)
 
 		for _, b := range serverUpdateData.Balls {
 			gameData.RemoteBalls.Store(b.Id, &Ball{

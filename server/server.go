@@ -252,13 +252,9 @@ func handleFirePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server
 			newY := remotePlayer.pos.Y + 16 - 7.5 + 40*math.Sin(remotePlayer.rotation)
 			ball.pos.Set(newX, newY)
 
-			// TODO Fix throw direction (prob problem where mouse points to where pos is [top left] - should be converted to center)
-			ballPosVec := vec.NewVec2(newX, newY)
-			playerPosVec := vec.NewVec2(remotePlayer.pos.X+16, remotePlayer.pos.Y+16)
-			val := ballPosVec.SubVecRet(playerPosVec)
-			val.Normalize()
-			val.Mul(3)
-			ball.vel = val
+			ball.vel = vec.NewVec2(math.Cos(remotePlayer.rotation), math.Sin(remotePlayer.rotation)).
+				Normalized().
+				Muled(3) // TODO Vector builder ?
 
 			ball.ownerId = NoOwner
 		}

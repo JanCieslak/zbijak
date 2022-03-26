@@ -63,6 +63,12 @@ func (v *Vec2) Mul(val float64) {
 	v.Y *= val
 }
 
+func (v Vec2) Muled(val float64) Vec2 {
+	v.X *= val
+	v.Y *= val
+	return v
+}
+
 func (v Vec2) Len() float64 {
 	return math.Sqrt(math.Pow(v.X, 2) + math.Pow(v.Y, 2))
 }
@@ -73,6 +79,15 @@ func (v *Vec2) Normalize() {
 		v.X /= length
 		v.Y /= length
 	}
+}
+
+func (v Vec2) Normalized() Vec2 {
+	length := v.Len()
+	if length > 0 {
+		v.X /= length
+		v.Y /= length
+	}
+	return v
 }
 
 func (v Vec2) Dot(v2 Vec2) float64 {
