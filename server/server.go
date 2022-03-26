@@ -38,7 +38,6 @@ func main() {
 	log.SetPrefix("Server - ")
 	log.SetOutput(ioutil.Discard)
 
-	// TODO Change to UDPConn (it implements ListenPacket)
 	serverAddress, err := net.ResolveUDPAddr("udp", ":8083")
 	if err != nil {
 		log.Fatalln("Udp address:", err)
@@ -65,58 +64,7 @@ func main() {
 		balls:        balls,
 	}
 
-	go func() {
-		tickTime := time.Second / constants.TickRate
-
-		for {
-			start := time.Now()
-			players := map[uint8]packets.PlayerData{}
-
-			server.players.Range(func(key, value any) bool {
-				clientId := key.(uint8)
-				player := value.(*RemotePlayer)
-
-				players[clientId] = packets.PlayerData{
-					ClientId: clientId,
-					Pos:      player.pos,
-					Rotation: player.rotation,
-					InDash:   player.inDash,
-				}
-
-				return true
-			})
-
-			if len(players) > 0 {
-				timeStamp := time.Now()
-
-				ballsData := make([]packets.BallData, 0)
-
-				for _, ball := range server.balls {
-					ballsData = append(ballsData, packets.BallData{
-						Id:    ball.id,
-						Owner: ball.ownerId,
-						Pos:   ball.pos,
-					})
-				}
-
-				server.players.Range(func(key, value any) bool {
-					player := value.(*RemotePlayer)
-
-					packets.SendPacketTo(conn, player.addr, packets.ServerUpdate, packets.ServerUpdatePacketData{
-						PlayersData: players,
-						Balls:       ballsData,
-						Timestamp:   timeStamp,
-					})
-
-					return true
-				})
-			}
-
-			if time.Since(start) < tickTime {
-				time.Sleep(tickTime - time.Since(start))
-			}
-		}
-	}()
+	go server.Update()
 
 	packetListener := packets.NewPacketListener(server)
 	packetListener.Register(packets.Hello, handleHelloPacket)
@@ -124,6 +72,76 @@ func main() {
 	packetListener.Register(packets.Bye, handleByePacket)
 	packetListener.Register(packets.Fire, handleFirePacket)
 	packetListener.Listen(server.conn)
+}
+
+func (s *Server) Update() {
+	tickTime := time.Second / constants.TickRate
+
+	for {
+		start := time.Now()
+
+		s.CheckCollisions()
+		s.SendServerUpdate()
+
+		if time.Since(start) < tickTime {
+			time.Sleep(tickTime - time.Since(start))
+		}
+	}
+}
+
+func (s *Server) CheckCollisions() {
+	s.players.Range(func(key, value any) bool {
+		remotePlayer := value.(*RemotePlayer)
+
+		if remotePlayer.pos.AddVecRet(vec.NewVec2(16, 16)).IsWithinRadius(s.balls[0].pos, 25) {
+			s.balls[0].ownerId = remotePlayer.clientId
+		}
+
+		return true
+	})
+}
+
+func (s *Server) SendServerUpdate() {
+	players := map[uint8]packets.PlayerData{}
+	s.players.Range(func(key, value any) bool {
+		clientId := key.(uint8)
+		player := value.(*RemotePlayer)
+
+		players[clientId] = packets.PlayerData{
+			ClientId: clientId,
+			Pos:      player.pos,
+			Rotation: player.rotation,
+			InDash:   player.inDash,
+		}
+
+		return true
+	})
+
+	if len(players) > 0 {
+		timeStamp := time.Now()
+
+		ballsData := make([]packets.BallData, 0)
+
+		for _, ball := range s.balls {
+			ballsData = append(ballsData, packets.BallData{
+				Id:    ball.id,
+				Owner: ball.ownerId,
+				Pos:   ball.pos,
+			})
+		}
+
+		s.players.Range(func(key, value any) bool {
+			player := value.(*RemotePlayer)
+
+			packets.SendPacketTo(s.conn, player.addr, packets.ServerUpdate, packets.ServerUpdatePacketData{
+				PlayersData: players,
+				Balls:       ballsData,
+				Timestamp:   timeStamp,
+			})
+
+			return true
+		})
+	}
 }
 
 func handleHelloPacket(_ packets.PacketKind, addr net.Addr, _ interface{}, server interface{}) {

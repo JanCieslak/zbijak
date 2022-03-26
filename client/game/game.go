@@ -234,9 +234,9 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
 
 		for _, b := range serverUpdateData.Balls {
-			_, _ = gameData.RemoteBalls.LoadOrStore(0, &Ball{ // TODO Hardcoded
+			gameData.RemoteBalls.Store(0, &Ball{ // TODO Hardcoded
 				Id:      0, // TODO Hardcoded
-				OwnerId: 0,
+				OwnerId: b.Owner,
 				Pos:     b.Pos,
 			})
 		}

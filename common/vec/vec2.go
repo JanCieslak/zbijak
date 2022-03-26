@@ -42,9 +42,20 @@ func (v *Vec2) AddVec(other Vec2) {
 	v.Y += other.Y
 }
 
+func (v Vec2) AddVecRet(other Vec2) Vec2 {
+	return Vec2{v.X + other.X, v.Y + other.Y}
+}
+
 func (v *Vec2) SubVec(other Vec2) {
 	v.X -= other.X
 	v.Y -= other.Y
+}
+
+func (v Vec2) SubVecRet(other Vec2) Vec2 {
+	return Vec2{
+		X: v.X - other.X,
+		Y: v.Y - other.Y,
+	}
 }
 
 func (v *Vec2) Mul(val float64) {
@@ -66,4 +77,8 @@ func (v *Vec2) Normalize() {
 
 func (v Vec2) Dot(v2 Vec2) float64 {
 	return v.X*v2.X + v.Y*v2.Y
+}
+
+func (v Vec2) IsWithinRadius(other Vec2, maxLen float64) bool {
+	return v.SubVecRet(other).Len() < maxLen
 }
