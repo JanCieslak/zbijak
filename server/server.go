@@ -6,6 +6,7 @@ import (
 	"github.com/JanCieslak/zbijak/common/vec"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -34,6 +35,7 @@ type RemotePlayer struct {
 type RemoteBall struct {
 	id      uint8
 	pos     vec.Vec2
+	vel     vec.Vec2
 	ownerId uint8
 }
 
@@ -56,12 +58,14 @@ func main() {
 	balls := sync.Map{}
 	balls.Store(0, &RemoteBall{
 		id:      0,
-		pos:     vec.Vec2{X: 300, Y: 300},
+		pos:     vec.NewVec2(300, 300),
+		vel:     vec.NewVec2(0, 0),
 		ownerId: 0,
 	})
 	balls.Store(1, &RemoteBall{
 		id:      1,
-		pos:     vec.Vec2{X: 600, Y: 300},
+		pos:     vec.NewVec2(600, 300),
+		vel:     vec.NewVec2(0, 0),
 		ownerId: NoOwner,
 	})
 
@@ -89,6 +93,7 @@ func (s *Server) Update() {
 		start := time.Now()
 
 		s.CheckCollisions()
+		s.MoveBalls()
 		s.SendServerUpdate()
 
 		if time.Since(start) < tickTime {
@@ -121,6 +126,30 @@ func (s *Server) CheckCollisions() {
 			return true
 		})
 
+		return true
+	})
+
+	// Ball wall collisions
+	s.balls.Range(func(key, value any) bool {
+		remoteBall := value.(*RemoteBall)
+
+		if remoteBall.pos.Y <= 0 || remoteBall.pos.Y+16 >= constants.ScreenHeight {
+			remoteBall.vel.Y *= -1
+		}
+		if remoteBall.pos.X <= 0 || remoteBall.pos.X+16 >= constants.ScreenWidth {
+			remoteBall.vel.X *= -1
+		}
+
+		return true
+	})
+}
+
+func (s *Server) MoveBalls() {
+	s.balls.Range(func(key, value any) bool {
+		remoteBall := value.(*RemoteBall)
+		if remoteBall.ownerId == 255 {
+			remoteBall.pos.Add(remoteBall.vel.X, remoteBall.vel.Y)
+		}
 		return true
 	})
 }
@@ -214,6 +243,23 @@ func handleFirePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server
 	serverData.balls.Range(func(key, value any) bool {
 		ball := value.(*RemoteBall)
 		if ball.ownerId == firePacketData.ClientId {
+			value, ok := serverData.players.Load(firePacketData.ClientId)
+			if !ok {
+				log.Fatalf("Couldn't find player with given client id: %d from fire packet data\n", firePacketData.ClientId)
+			}
+			remotePlayer := value.(*RemotePlayer)
+			newX := remotePlayer.pos.X + 16 - 7.5 + 40*math.Cos(remotePlayer.rotation) // TODO Hardcoded
+			newY := remotePlayer.pos.Y + 16 - 7.5 + 40*math.Sin(remotePlayer.rotation)
+			ball.pos.Set(newX, newY)
+
+			// TODO Fix throw direction (prob problem where mouse points to where pos is [top left] - should be converted to center)
+			ballPosVec := vec.NewVec2(newX, newY)
+			playerPosVec := vec.NewVec2(remotePlayer.pos.X+16, remotePlayer.pos.Y+16)
+			val := ballPosVec.SubVecRet(playerPosVec)
+			val.Normalize()
+			val.Mul(3)
+			ball.vel = val
+
 			ball.ownerId = NoOwner
 		}
 		return true

@@ -151,7 +151,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				by := ballOwner.Pos.Y + 15 - 7.5 + 40*math.Sin(ballOwner.Rotation)
 				drawCircleOutline(screen, bx, by, 0.5)
 			} else {
-				drawCircle(screen, b.Pos.X, b.Pos.Y, 0.5)
+				drawCircleOutline(screen, b.Pos.X, b.Pos.Y, 0.5)
 			}
 		}
 		for _, p := range update.PlayersData {
@@ -183,6 +183,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				by := ballOwner.pos.Y + 15 - 7.5 + 40*math.Sin(ballOwner.rotation)
 				drawCircle(screen, bx, by, 0.5)
 			}
+		} else {
+			drawCircle(screen, remoteBall.Pos.X, remoteBall.Pos.Y, 0.5)
 		}
 		return true
 	})

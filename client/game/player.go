@@ -1,6 +1,7 @@
 package game
 
 import (
+	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"math"
@@ -76,4 +77,20 @@ func (p *Player) Update(g *Game) {
 	p.PlayerState.Update(g, p)
 
 	p.Pos.AddVec(p.Velocity)
+
+	// Wall collisions
+	if p.Pos.X <= 0 {
+		p.Pos.X = 0
+	}
+	if p.Pos.X+32 >= constants.ScreenWidth {
+		p.Pos.X = constants.ScreenWidth - 32
+	}
+	if p.Pos.Y <= 0 {
+		p.Pos.Y = 0
+	}
+	if p.Pos.Y+32 >= constants.ScreenHeight {
+		p.Pos.Y = constants.ScreenHeight - 32
+	}
+
+	// TODO ball wall conditions (now one can throw ball outside of the screen) ;/
 }
