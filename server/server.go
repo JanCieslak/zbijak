@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/JanCieslak/zbijak/common/vec"
@@ -13,11 +12,15 @@ import (
 	"time"
 )
 
+const (
+	NoOwner = 255 // TODO Limit players ?
+)
+
 type Server struct {
 	players      sync.Map
 	nextClientId uint32
 	conn         *net.UDPConn
-	balls        []RemoteBall
+	balls        sync.Map
 }
 
 type RemotePlayer struct {
@@ -50,11 +53,16 @@ func main() {
 
 	log.Println("Listening on: 8083")
 
-	balls := make([]RemoteBall, 0)
-	balls = append(balls, RemoteBall{
+	balls := sync.Map{}
+	balls.Store(0, &RemoteBall{
 		id:      0,
 		pos:     vec.Vec2{X: 300, Y: 300},
 		ownerId: 0,
+	})
+	balls.Store(1, &RemoteBall{
+		id:      1,
+		pos:     vec.Vec2{X: 600, Y: 300},
+		ownerId: NoOwner,
 	})
 
 	server := &Server{
@@ -93,9 +101,25 @@ func (s *Server) CheckCollisions() {
 	s.players.Range(func(key, value any) bool {
 		remotePlayer := value.(*RemotePlayer)
 
-		if remotePlayer.pos.AddVecRet(vec.NewVec2(16, 16)).IsWithinRadius(s.balls[0].pos, 25) {
-			s.balls[0].ownerId = remotePlayer.clientId
-		}
+		// Picking up balls
+		s.balls.Range(func(key, value any) bool {
+			ball := value.(*RemoteBall)
+			if remotePlayer.pos.AddVecRet(vec.NewVec2(16, 16)).IsWithinRadius(ball.pos, 25) { // TODO Hardcoded
+				isOwned := false
+				s.balls.Range(func(key, value any) bool {
+					innerBall := value.(*RemoteBall)
+					if remotePlayer.clientId == innerBall.ownerId {
+						isOwned = true
+						return false
+					}
+					return true
+				})
+				if !isOwned {
+					ball.ownerId = remotePlayer.clientId
+				}
+			}
+			return true
+		})
 
 		return true
 	})
@@ -122,13 +146,15 @@ func (s *Server) SendServerUpdate() {
 
 		ballsData := make([]packets.BallData, 0)
 
-		for _, ball := range s.balls {
+		s.balls.Range(func(key, value any) bool {
+			ball := value.(*RemoteBall)
 			ballsData = append(ballsData, packets.BallData{
 				Id:    ball.id,
 				Owner: ball.ownerId,
 				Pos:   ball.pos,
 			})
-		}
+			return true
+		})
 
 		s.players.Range(func(key, value any) bool {
 			player := value.(*RemotePlayer)
@@ -182,9 +208,14 @@ func handleByePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server 
 }
 
 func handleFirePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server interface{}) {
-	//firePacketData := data.(packets.FirePacketData)
+	firePacketData := data.(packets.FirePacketData)
 	serverData := server.(*Server)
 
-	serverData.balls[0].ownerId = 255 // TODO search ball by firePacketData ownerId
-	fmt.Println("FIRED")
+	serverData.balls.Range(func(key, value any) bool {
+		ball := value.(*RemoteBall)
+		if ball.ownerId == firePacketData.ClientId {
+			ball.ownerId = NoOwner
+		}
+		return true
+	})
 }

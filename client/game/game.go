@@ -233,9 +233,11 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 		gameData.LastServerUpdate = serverUpdateData.Timestamp
 		gameData.serverUpdates = append(gameData.serverUpdates, serverUpdateData)
 
+		fmt.Println(serverUpdateData.Balls)
+
 		for _, b := range serverUpdateData.Balls {
-			gameData.RemoteBalls.Store(0, &Ball{ // TODO Hardcoded
-				Id:      0, // TODO Hardcoded
+			gameData.RemoteBalls.Store(b.Id, &Ball{
+				Id:      b.Id,
 				OwnerId: b.Owner,
 				Pos:     b.Pos,
 			})

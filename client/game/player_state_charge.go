@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"github.com/JanCieslak/zbijak/common/packets"
 	"github.com/hajimehoshi/ebiten/v2"
 	"reflect"
@@ -19,7 +18,6 @@ func (s ChargePlayerState) Update(g *Game, p *Player) {
 		packets.Send(g.Conn, packets.Fire, packets.FirePacketData{
 			ClientId: g.Id,
 		})
-		fmt.Println("FIRE SENT")
 	}
 
 	if reflect.TypeOf(p.MovementState) == reflect.TypeOf(NormalMovementState{}) {
