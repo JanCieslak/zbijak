@@ -105,3 +105,10 @@ func PacketKindFromBytes(bytes []byte) PacketKind {
 func Lerp(start, end, p float64) float64 {
 	return start + (end-start)*p
 }
+
+//func SLerp(start, end vec.Vec2, p float64) vec.Vec2 {
+//	angle := math.Acos(start.Dot(end))
+//	one := math.Sin((1-p)*angle) / math.Sin(angle)
+//	two := math.Sin(p*angle) / math.Sin(angle)
+//	return start.MulRet(one).AddVecRet(end.MulRet(two))
+//}

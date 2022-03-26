@@ -24,6 +24,7 @@ type RemotePlayer struct {
 	clientId uint8
 	addr     net.Addr
 	pos      vec.Vec2
+	rotation float64
 	inDash   bool
 }
 
@@ -78,6 +79,7 @@ func main() {
 				players[clientId] = packets.PlayerData{
 					ClientId: clientId,
 					Pos:      player.pos,
+					Rotation: player.rotation,
 					InDash:   player.inDash,
 				}
 
@@ -140,6 +142,7 @@ func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interfac
 		clientId: playerUpdatePacketData.ClientId,
 		addr:     addr,
 		pos:      playerUpdatePacketData.Pos,
+		rotation: playerUpdatePacketData.Rotation,
 		inDash:   playerUpdatePacketData.InDash,
 	})
 }

@@ -3,7 +3,12 @@ package game
 import (
 	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
+	"math"
 	"time"
+)
+
+var (
+	RotationBase = vec.Right
 )
 
 const (
@@ -22,6 +27,7 @@ type Player struct {
 	Velocity      vec.Vec2
 	MovementState State
 	PlayerState   State
+	Rotation      float64
 }
 
 func NewPlayer(x, y float64) *Player {
@@ -49,6 +55,18 @@ func (p *Player) Update(g *Game) {
 	}
 	if ebiten.IsKeyPressed(ebiten.KeyArrowDown) || ebiten.IsKeyPressed(ebiten.KeyS) {
 		moveVector.Add(0, 1)
+	}
+
+	mx, my := ebiten.CursorPosition()
+	// TODO Radius 32
+	cp := vec.NewVec2(p.Pos.X+16, p.Pos.Y+16)
+	mVec := vec.NewIVec2(mx, my)
+	if mVec.Y > cp.Y {
+		mVec.SubVec(cp)
+		p.Rotation = math.Acos(vec.Right.Dot(mVec) / (vec.Right.Len() * mVec.Len()))
+	} else {
+		mVec.SubVec(cp)
+		p.Rotation = math.Pi + math.Acos(-vec.Right.Dot(mVec)/(vec.Right.Len()*mVec.Len()))
 	}
 
 	moveVector.Normalize()

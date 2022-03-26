@@ -13,6 +13,7 @@ import (
 	"image/color"
 	_ "image/png"
 	"log"
+	"math"
 	"net"
 	"os"
 	"reflect"
@@ -21,8 +22,9 @@ import (
 )
 
 type RemotePlayer struct {
-	pos    vec.Vec2
-	inDash bool
+	pos      vec.Vec2
+	rotation float64
+	inDash   bool
 }
 
 type Game struct {
@@ -43,6 +45,7 @@ func (g *Game) Update() error {
 	packets.Send(g.Conn, packets.PlayerUpdate, packets.PlayerUpdatePacketData{
 		ClientId: g.Id,
 		Pos:      g.Player.Pos,
+		Rotation: g.Player.Rotation,
 		InDash:   reflect.TypeOf(g.Player.MovementState) == reflect.TypeOf(DashMovementState{}),
 	})
 
@@ -65,8 +68,10 @@ func (g *Game) Update() error {
 				if ok0 && ok1 {
 					newX := packets.Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
 					newY := packets.Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
+					newRotation := packets.Lerp(playerOne.Rotation, playerTwo.Rotation, interpolationFactor)
 
 					remotePlayer.pos.Set(newX, newY)
+					remotePlayer.rotation = newRotation
 				}
 
 				return true
@@ -104,7 +109,7 @@ var (
 )
 
 func init() {
-	circleOutlineImage = loadImage("resources/circle.png", 0.1)
+	circleOutlineImage = loadImage("resources/circle.png", 0.2)
 	circleImage = loadImage("resources/filled_circle.png", 1.0)
 }
 
@@ -137,23 +142,20 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrint(screen, info)
 
 	for _, update := range g.serverUpdates {
+		// TODO fix jumping ballz (this may be happening because ebiten.GetMousePosition() gets position from other windows from time to time ?)
+		// TODO It's a interpolation thing (jump from almost full rotation value to 0 - it will try to interpolate whole circle)
 		for _, b := range update.Balls {
-			value, ok := g.RemotePlayers.Load(b.Owner)
-			if ok {
-				ballOwner := value.(*RemotePlayer)
-
-				if g.Id == b.Owner {
-					// TODO Add another image for ball
-					drawCircle(screen, g.Player.Pos.X-30, g.Player.Pos.Y+10, 0.5)
-				} else {
-					drawCircle(screen, ballOwner.pos.X-30, ballOwner.pos.Y+10, 0.5)
-				}
+			ballOwner, hasOwner := update.PlayersData[b.Owner]
+			if hasOwner {
+				bx := ballOwner.Pos.X + 15 - 7.5 + 40*math.Cos(ballOwner.Rotation)
+				by := ballOwner.Pos.Y + 15 - 7.5 + 40*math.Sin(ballOwner.Rotation)
+				drawCircleOutline(screen, bx, by, 0.5)
 			} else {
 				drawCircle(screen, b.Pos.X, b.Pos.Y, 0.5)
 			}
 		}
 		for _, p := range update.PlayersData {
-			drawCircleOutline(screen, p.Pos.X, p.Pos.Y)
+			drawCircleOutline(screen, p.Pos.X, p.Pos.Y, 1)
 		}
 	}
 
@@ -162,6 +164,25 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.Id {
 			drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1)
+		}
+		return true
+	})
+
+	g.RemoteBalls.Range(func(key, value any) bool {
+		remoteBall := value.(*Ball)
+
+		remotePlayer, hasOwner := g.RemotePlayers.Load(remoteBall.OwnerId)
+		if hasOwner {
+			ballOwner := remotePlayer.(*RemotePlayer)
+			if remoteBall.OwnerId == g.Id {
+				bx := g.Player.Pos.X + 15 - 7.5 + 40*math.Cos(g.Player.Rotation)
+				by := g.Player.Pos.Y + 15 - 7.5 + 40*math.Sin(g.Player.Rotation)
+				drawCircle(screen, bx, by, 0.5)
+			} else {
+				bx := ballOwner.pos.X + 15 - 7.5 + 40*math.Cos(ballOwner.rotation)
+				by := ballOwner.pos.Y + 15 - 7.5 + 40*math.Sin(ballOwner.rotation)
+				drawCircle(screen, bx, by, 0.5)
+			}
 		}
 		return true
 	})
@@ -176,8 +197,9 @@ func drawCircle(screen *ebiten.Image, x, y, s float64) {
 	screen.DrawImage(circleImage, &op)
 }
 
-func drawCircleOutline(screen *ebiten.Image, x, y float64) {
+func drawCircleOutline(screen *ebiten.Image, x, y, s float64) {
 	op := ebiten.DrawImageOptions{}
+	op.GeoM.Scale(s, s)
 	op.GeoM.Translate(x, y)
 	screen.DrawImage(circleOutlineImage, &op)
 }
@@ -221,8 +243,9 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 
 		for _, p := range serverUpdateData.PlayersData {
 			_, _ = gameData.RemotePlayers.LoadOrStore(p.ClientId, &RemotePlayer{
-				pos:    p.Pos,
-				inDash: p.InDash,
+				pos:      p.Pos,
+				rotation: p.Rotation,
+				inDash:   p.InDash,
 			})
 		}
 	}

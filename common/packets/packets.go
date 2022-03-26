@@ -26,12 +26,14 @@ type WelcomePacketData struct {
 type PlayerUpdatePacketData struct {
 	ClientId uint8
 	Pos      vec.Vec2
+	Rotation float64
 	InDash   bool
 }
 
 type PlayerData struct {
 	ClientId uint8
 	Pos      vec.Vec2
+	Rotation float64
 	InDash   bool
 }
 
