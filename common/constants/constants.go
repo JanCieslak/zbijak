@@ -8,3 +8,10 @@ const (
 	PlayerRadius        = 16
 	BallRadius          = 8
 )
+
+type Team uint8
+
+const (
+	TeamBlue Team = iota
+	TeamOrange
+)

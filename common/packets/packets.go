@@ -1,6 +1,7 @@
 package packets
 
 import (
+	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/vec"
 	"time"
 )
@@ -21,10 +22,12 @@ type HelloPacketData struct{}
 
 type WelcomePacketData struct {
 	ClientId uint8
+	Team     constants.Team
 }
 
 type PlayerUpdatePacketData struct {
 	ClientId uint8
+	Team     constants.Team
 	Name     string
 	Pos      vec.Vec2
 	Rotation float64
@@ -33,6 +36,7 @@ type PlayerUpdatePacketData struct {
 
 type PlayerData struct {
 	ClientId uint8
+	Team     constants.Team
 	Name     string
 	Pos      vec.Vec2
 	Rotation float64

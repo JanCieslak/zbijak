@@ -20,12 +20,14 @@ const (
 type Server struct {
 	players      sync.Map
 	nextClientId uint32
+	nextTeam     constants.Team
 	conn         *net.UDPConn
 	balls        sync.Map
 }
 
 type RemotePlayer struct {
 	clientId uint8
+	team     constants.Team
 	name     string
 	addr     net.Addr
 	pos      vec.Vec2
@@ -73,6 +75,7 @@ func main() {
 	server := &Server{
 		players:      sync.Map{},
 		nextClientId: 0,
+		nextTeam:     constants.TeamOrange,
 		conn:         conn,
 		balls:        balls,
 	}
@@ -163,6 +166,7 @@ func (s *Server) SendServerUpdate() {
 
 		players[clientId] = packets.PlayerData{
 			ClientId: clientId,
+			Team:     player.team,
 			Name:     player.name,
 			Pos:      player.pos,
 			Rotation: player.rotation,
@@ -205,8 +209,16 @@ func handleHelloPacket(_ packets.PacketKind, addr net.Addr, _ interface{}, serve
 	serverData := server.(*Server)
 	packets.SendPacketTo(serverData.conn, addr, packets.Welcome, packets.WelcomePacketData{
 		ClientId: uint8(serverData.nextClientId),
+		Team:     serverData.nextTeam,
 	})
 	atomic.AddUint32(&serverData.nextClientId, 1)
+	if serverData.nextTeam == constants.TeamOrange {
+		serverData.nextTeam = constants.TeamBlue
+	} else {
+		serverData.nextTeam = constants.TeamOrange
+	}
+
+	// TODO Registering should be happening here, right ?
 }
 
 func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
@@ -215,6 +227,7 @@ func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interfac
 
 	serverData.players.Store(playerUpdatePacketData.ClientId, &RemotePlayer{
 		clientId: playerUpdatePacketData.ClientId,
+		team:     playerUpdatePacketData.Team,
 		name:     playerUpdatePacketData.Name,
 		addr:     addr,
 		pos:      playerUpdatePacketData.Pos,

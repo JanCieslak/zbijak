@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -70,8 +69,6 @@ func (p *Player) Update(g *Game) {
 		mVec.SubVec(cp)
 		p.Rotation = math.Pi + math.Acos(-vec.Right.Dot(mVec)/(vec.Right.Len()*mVec.Len()))
 	}
-
-	fmt.Println("Player rotation:", p.Rotation)
 
 	moveVector.Normalize()
 	p.Velocity = moveVector

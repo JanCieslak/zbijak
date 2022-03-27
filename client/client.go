@@ -35,12 +35,13 @@ func main() {
 	}
 
 	// TODO Use reliable connection
-	clientId := game.Hello(conn)
+	clientId, team := game.Hello(conn)
 
 	fmt.Println("Client id", clientId)
 
 	g := &game.Game{
 		Id:               clientId,
+		Team:             team,
 		Name:             name,
 		Player:           game.NewPlayer(250, 250), // TODO Get from the server ?
 		Conn:             conn,

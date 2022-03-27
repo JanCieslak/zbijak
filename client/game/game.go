@@ -25,6 +25,7 @@ import (
 
 type RemotePlayer struct {
 	pos      vec.Vec2
+	team     constants.Team
 	name     string
 	rotation float64
 	inDash   bool
@@ -32,6 +33,7 @@ type RemotePlayer struct {
 
 type Game struct {
 	Id            uint8
+	Team          constants.Team
 	Name          string
 	Player        *Player
 	Conn          *net.UDPConn // TODO Abstract - NetworkManager
@@ -48,6 +50,7 @@ func (g *Game) Update() error {
 
 	packets.Send(g.Conn, packets.PlayerUpdate, packets.PlayerUpdatePacketData{
 		ClientId: g.Id,
+		Team:     g.Team,
 		Name:     g.Name,
 		Pos:      g.Player.Pos,
 		Rotation: g.Player.Rotation,
@@ -140,8 +143,20 @@ func loadImage(path string, alpha float64) *ebiten.Image {
 	return ebitenImage
 }
 
+var (
+	OrangeTeamColor = color.RGBA{R: 235, G: 131, B: 52, A: 255}
+	BlueTeamColor   = color.RGBA{R: 52, G: 158, B: 235, A: 255}
+)
+
 func (g *Game) Draw(screen *ebiten.Image) {
 	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
+	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
+	var teamColor color.Color
+	if g.Team == constants.TeamOrange {
+		teamColor = OrangeTeamColor
+	} else {
+		teamColor = BlueTeamColor
+	}
 
 	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
 	ebitenutil.DebugPrint(screen, info)
@@ -152,8 +167,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		for _, b := range update.Balls {
 			ballOwner, hasOwner := update.PlayersData[b.Owner]
 			if hasOwner {
-				bx := ballOwner.Pos.X + 15 - 7.5 + 40*math.Cos(ballOwner.Rotation)
-				by := ballOwner.Pos.Y + 15 - 7.5 + 40*math.Sin(ballOwner.Rotation)
+				bx := ballOwner.Pos.X + 16 - 7.5 + 40*math.Cos(ballOwner.Rotation)
+				by := ballOwner.Pos.Y + 16 - 7.5 + 40*math.Sin(ballOwner.Rotation)
 				drawCircleOutline(screen, bx, by, 0.5)
 			} else {
 				drawCircleOutline(screen, b.Pos.X, b.Pos.Y, 0.5)
@@ -168,7 +183,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.Id {
-			drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1)
+			if remotePlayer.team == constants.TeamOrange {
+				drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1, OrangeTeamColor)
+			} else {
+				drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1, BlueTeamColor)
+			}
 			face := inconsolata.Bold8x16
 			textBounds := text.BoundString(face, g.Name)
 			text.Draw(screen, remotePlayer.name, face, int(remotePlayer.pos.X+constants.PlayerRadius)-textBounds.Dx()/2, int(remotePlayer.pos.Y+constants.PlayerRadius)+3, color.RGBA{R: 0, G: 0, B: 0, A: 255})
@@ -185,31 +204,43 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			if remoteBall.OwnerId == g.Id {
 				bx := g.Player.Pos.X + 16 - 8 + 40*math.Cos(g.Player.Rotation)
 				by := g.Player.Pos.Y + 16 - 8 + 40*math.Sin(g.Player.Rotation)
-				drawCircle(screen, bx, by, 0.5)
+				drawCircle(screen, bx, by, 0.5, teamColor)
 			} else {
 				bx := ballOwner.pos.X + 16 - 8 + 40*math.Cos(ballOwner.rotation)
 				by := ballOwner.pos.Y + 16 - 8 + 40*math.Sin(ballOwner.rotation)
-				drawCircle(screen, bx, by, 0.5)
+				if ballOwner.team == constants.TeamOrange {
+					drawCircle(screen, bx, by, 0.5, OrangeTeamColor)
+				} else {
+					drawCircle(screen, bx, by, 0.5, BlueTeamColor)
+				}
 			}
 		} else {
-			drawCircle(screen, remoteBall.Pos.X, remoteBall.Pos.Y, 0.5)
+			drawCircle(screen, remoteBall.Pos.X, remoteBall.Pos.Y, 0.5, white)
 		}
 		return true
 	})
 
-	ebitenutil.DrawLine(screen, 0, g.Player.Pos.Y+16, g.Player.Pos.X+16, g.Player.Pos.Y+16, color.RGBA{R: 255, G: 0, B: 0, A: 255})
-	drawCircle(screen, g.Player.Pos.X, g.Player.Pos.Y, 1)
+	drawCircle(screen, g.Player.Pos.X, g.Player.Pos.Y, 1, teamColor)
 
 	face := inconsolata.Bold8x16
 	textBounds := text.BoundString(face, g.Name)
 	text.Draw(screen, g.Name, face, int(g.Player.Pos.X+constants.PlayerRadius)-textBounds.Dx()/2, int(g.Player.Pos.Y+constants.PlayerRadius)+3, color.RGBA{R: 0, G: 0, B: 0, A: 255})
 }
 
-func drawCircle(screen *ebiten.Image, x, y, s float64) {
+func drawCircle(screen *ebiten.Image, x, y, s float64, c color.Color) {
 	op := ebiten.DrawImageOptions{}
 	op.GeoM.Scale(s, s)
 	op.GeoM.Translate(x, y)
+	r, g, b, _ := c.RGBA()
+	rf := mapValue(float64(r), 0, 0xffff, 0, 1)
+	gf := mapValue(float64(g), 0, 0xffff, 0, 1)
+	bf := mapValue(float64(b), 0, 0xffff, 0, 1)
+	op.ColorM.Scale(rf, gf, bf, 1)
 	screen.DrawImage(circleImage, &op)
+}
+
+func mapValue(x, inMin, inMax, outMin, outMax float64) float64 {
+	return (x-inMin)*(outMax-outMin)/(inMax-inMin) + outMin
 }
 
 func drawCircleOutline(screen *ebiten.Image, x, y, s float64) {
@@ -259,6 +290,7 @@ func handleServerUpdatePacket(_ packets.PacketKind, _ net.Addr, data interface{}
 		for _, p := range serverUpdateData.PlayersData {
 			_, _ = gameData.RemotePlayers.LoadOrStore(p.ClientId, &RemotePlayer{
 				pos:      p.Pos,
+				team:     p.Team,
 				name:     p.Name,
 				rotation: p.Rotation,
 				inDash:   p.InDash,
@@ -274,14 +306,14 @@ func handleByeAckPacket(_ packets.PacketKind, _ net.Addr, data interface{}, game
 	gameData.RemotePlayers.Delete(byeAckData.ClientId)
 }
 
-func Hello(conn *net.UDPConn) uint8 {
+func Hello(conn *net.UDPConn) (uint8, constants.Team) {
 	packets.Send(conn, packets.Hello, packets.HelloPacketData{})
 
 	var welcomePacket packets.Packet[packets.WelcomePacketData]
 	packets.ReceivePacket(true, conn, &welcomePacket)
 	welcomePacketData := welcomePacket.Data
 
-	return welcomePacketData.ClientId
+	return welcomePacketData.ClientId, welcomePacketData.Team
 }
 
 func Bye(game *Game) {
