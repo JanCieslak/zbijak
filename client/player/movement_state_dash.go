@@ -1,4 +1,4 @@
-package game
+package player
 
 import (
 	"github.com/JanCieslak/zbijak/common/vec"
@@ -10,7 +10,7 @@ type DashMovementState struct {
 	dashVector vec.Vec2
 }
 
-func (s DashMovementState) Update(g *Game, p *Player) {
+func (s DashMovementState) Update(p *Player) {
 	if time.Since(s.startTime) > DashDuration {
 		p.MovementState = NormalMovementState{
 			lastDashTime: time.Now(),

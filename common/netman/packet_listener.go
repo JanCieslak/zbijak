@@ -1,4 +1,4 @@
-package packets
+package netman
 
 import (
 	"encoding/json"
@@ -55,6 +55,43 @@ func (packetListener *PacketListener) Register(kind PacketKind, callback PacketL
 func (packetListener *PacketListener) Listen(conn *net.UDPConn) {
 	for packetListener.shouldListen.Get() {
 		addr, buffer := ReceivePacketWithAddr(conn)
+		kind := PacketKindFromBytes(buffer)
+		callback, ok := packetListener.callbacks[kind]
+		if !ok {
+			log.Fatalf("Kind: %v not defined in callbacks\n", kind)
+		}
+
+		switch kind {
+		case Hello:
+			callCallback[HelloPacketData](packetListener, addr, buffer, callback, kind)
+			break
+		case Welcome:
+			callCallback[WelcomePacketData](packetListener, addr, buffer, callback, kind)
+			break
+		case PlayerUpdate:
+			callCallback[PlayerUpdatePacketData](packetListener, addr, buffer, callback, kind)
+			break
+		case ServerUpdate:
+			callCallback[ServerUpdatePacketData](packetListener, addr, buffer, callback, kind)
+			break
+		case Fire:
+			callCallback[FirePacketData](packetListener, addr, buffer, callback, kind)
+			break
+		case Bye:
+			callCallback[ByePacketData](packetListener, addr, buffer, callback, kind)
+			break
+		case ByeAck:
+			callCallback[ByeAckPacketData](packetListener, addr, buffer, callback, kind)
+			break
+		default:
+			log.Fatalln("Should define switch branch")
+		}
+	}
+}
+
+func (packetListener *PacketListener) Listen2() {
+	for packetListener.shouldListen.Get() {
+		buffer, addr := ReceiveBytesFromUnreliable()
 		kind := PacketKindFromBytes(buffer)
 		callback, ok := packetListener.callbacks[kind]
 		if !ok {

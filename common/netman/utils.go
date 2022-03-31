@@ -1,4 +1,4 @@
-package packets
+package netman
 
 import (
 	"encoding/binary"
@@ -8,7 +8,7 @@ import (
 )
 
 func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
-	buffer := make([]byte, 512)
+	buffer := make([]byte, 1024)
 
 	//log.Printf("[%v] Receiving packet...", conn.LocalAddr())
 	_, addr, err := conn.ReadFrom(buffer)
@@ -20,44 +20,8 @@ func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
 	return addr, buffer[2 : dataLen+2]
 }
 
-func SendPacketTo[T PacketData](conn net.PacketConn, toAddr net.Addr, packetKind PacketKind, packetData T) {
-	var packet Packet[T]
-	packet.Kind = packetKind
-	packet.Data = packetData
-	data := Serialize(packet)
-
-	buffer := make([]byte, 2)
-	dataLen := uint16(len(data))
-	binary.BigEndian.PutUint16(buffer, dataLen)
-
-	buffer = append(buffer, data...)
-
-	_, err := conn.WriteTo(buffer, toAddr)
-	if err != nil {
-		log.Fatalf("Sending packet to %v error: %v", toAddr, err)
-	}
-}
-
-func Send[T PacketData](conn *net.UDPConn, packetKind PacketKind, packetData T) {
-	var packet Packet[T]
-	packet.Kind = packetKind
-	packet.Data = packetData
-	data := Serialize(packet)
-
-	buffer := make([]byte, 2)
-	dataLen := uint16(len(data))
-	binary.BigEndian.PutUint16(buffer, dataLen)
-
-	buffer = append(buffer, data...)
-
-	_, err := conn.Write(buffer)
-	if err != nil {
-		log.Fatalln("Sending packet error:", err)
-	}
-}
-
 func ReceivePacket[T PacketData](client bool, conn *net.UDPConn, packet *Packet[T]) {
-	buffer := make([]byte, 512)
+	buffer := make([]byte, 1024)
 
 	//log.Printf("[%v] Receiving packet...", conn.LocalAddr())
 	if client {
@@ -81,12 +45,56 @@ func ReceivePacket[T PacketData](client bool, conn *net.UDPConn, packet *Packet[
 	}
 }
 
-func Serialize(packet any) []byte {
+func SendPacketTo[T PacketData](conn net.PacketConn, toAddr net.Addr, packetKind PacketKind, packetData T) {
+	var packet Packet[T]
+	packet.Kind = packetKind
+	packet.Data = packetData
+	data := serialize(packet)
+
+	buffer := make([]byte, 2)
+	dataLen := uint16(len(data))
+	binary.BigEndian.PutUint16(buffer, dataLen)
+
+	buffer = append(buffer, data...)
+
+	_, err := conn.WriteTo(buffer, toAddr)
+	if err != nil {
+		log.Fatalf("Sending packet to %v error: %v", toAddr, err)
+	}
+}
+
+func Send2[T PacketData](conn *net.UDPConn, packetKind PacketKind, packetData T) {
+	var packet Packet[T]
+	packet.Kind = packetKind
+	packet.Data = packetData
+	data := serialize(packet)
+
+	buffer := make([]byte, 2)
+	dataLen := uint16(len(data))
+	binary.BigEndian.PutUint16(buffer, dataLen)
+
+	buffer = append(buffer, data...)
+
+	_, err := conn.Write(buffer)
+	if err != nil {
+		log.Fatalln("Sending packet error:", err)
+	}
+}
+
+// TODO Abstract to insert better serializer
+func serialize(packet any) []byte {
 	data, err := json.Marshal(packet)
 	if err != nil {
 		log.Fatalln("Error when serializing packet:", packet)
 	}
 	return data
+}
+
+func deserialize[T PacketData](bytes []byte, packet *Packet[T]) {
+	err := json.Unmarshal(bytes, packet)
+	if err != nil {
+		log.Fatalln("Error when deserializing packet")
+	}
 }
 
 func PacketKindFromBytes(bytes []byte) PacketKind {
@@ -101,14 +109,3 @@ func PacketKindFromBytes(bytes []byte) PacketKind {
 	}
 	return packet.Kind
 }
-
-func Lerp(start, end, p float64) float64 {
-	return start + (end-start)*p
-}
-
-//func SLerp(start, end vec.Vec2, p float64) vec.Vec2 {
-//	angle := math.Acos(start.Dot(end))
-//	one := math.Sin((1-p)*angle) / math.Sin(angle)
-//	two := math.Sin(p*angle) / math.Sin(angle)
-//	return start.MulRet(one).AddVecRet(end.MulRet(two))
-//}

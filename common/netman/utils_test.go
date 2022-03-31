@@ -1,4 +1,4 @@
-package packets
+package netman
 
 import (
 	"encoding/binary"
@@ -15,7 +15,7 @@ func TestSerde(t *testing.T) {
 			ClientId: 123,
 		},
 	}
-	data := Serialize(packet)
+	data := serialize(packet)
 
 	var jsonPacket Packet[WelcomePacketData]
 	err := json.Unmarshal(data, &jsonPacket)
@@ -41,17 +41,17 @@ func TestBinary(t *testing.T) {
 }
 
 func TestPackets(t *testing.T) {
-	//addr, err := net.ResolveUDPAddr("udp", ":8083")
+	//addr, err := netman.ResolveUDPAddr("udp", ":8083")
 	//if err != nil {
 	//	log.Fatalln("Resolve Addr error:", err)
 	//}
 	//
-	//serverConn, err := net.ListenUDP("udp", addr)
+	//serverConn, err := netman.ListenUDP("udp", addr)
 	//if err != nil {
 	//	log.Fatalln(err)
 	//}
 	//
-	//clientConn, err := net.DialUDP("udp", nil, addr)
+	//clientConn, err := netman.DialUDP("udp", nil, addr)
 	//if err != nil {
 	//	log.Fatalln("Dial creation:", err)
 	//}
@@ -62,8 +62,8 @@ func TestPackets(t *testing.T) {
 	//		ClientId: 123,
 	//	},
 	//}
-	//data := Serialize(packet)
-	//Send(clientConn, nil, data)
+	//data := serialize(packet)
+	//Send2(clientConn, nil, data)
 	//
 	//bytes := ReceivePacket(false, serverConn)
 	//var jsonPacket Packet[WelcomePacketData]

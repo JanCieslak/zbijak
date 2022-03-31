@@ -1,4 +1,4 @@
-package game
+package player
 
 import (
 	"github.com/JanCieslak/zbijak/common/constants"
@@ -24,6 +24,7 @@ const (
 )
 
 type Player struct {
+	Id            uint8
 	Pos           vec.Vec2
 	Velocity      vec.Vec2
 	MovementState State
@@ -31,8 +32,9 @@ type Player struct {
 	Rotation      float64
 }
 
-func NewPlayer(x, y float64) *Player {
+func NewPlayer(id uint8, x, y float64) *Player {
 	return &Player{
+		Id:       id,
 		Pos:      vec.Vec2{X: x, Y: y},
 		Velocity: vec.Vec2{},
 		MovementState: NormalMovementState{
@@ -42,7 +44,7 @@ func NewPlayer(x, y float64) *Player {
 	}
 }
 
-func (p *Player) Update(g *Game) {
+func (p *Player) Update() {
 	moveVector := vec.Vec2{}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
@@ -73,8 +75,8 @@ func (p *Player) Update(g *Game) {
 	moveVector.Normalize()
 	p.Velocity = moveVector
 
-	p.MovementState.Update(g, p)
-	p.PlayerState.Update(g, p)
+	p.MovementState.Update(p)
+	p.PlayerState.Update(p)
 
 	p.Pos.AddVec(p.Velocity)
 

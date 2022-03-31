@@ -1,4 +1,4 @@
-package packets
+package netman
 
 import (
 	"github.com/JanCieslak/zbijak/common/constants"

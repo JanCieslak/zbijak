@@ -2,28 +2,12 @@ package main
 
 import (
 	"github.com/JanCieslak/zbijak/common/constants"
-	"github.com/JanCieslak/zbijak/common/packets"
+	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/JanCieslak/zbijak/common/vec"
-	"io/ioutil"
-	"log"
-	"math"
 	"net"
 	"sync"
-	"sync/atomic"
 	"time"
 )
-
-const (
-	NoOwner = 255 // TODO Limit players ?
-)
-
-type Server struct {
-	players      sync.Map
-	nextClientId uint32
-	nextTeam     constants.Team
-	conn         *net.UDPConn
-	balls        sync.Map
-}
 
 type RemotePlayer struct {
 	clientId uint8
@@ -37,78 +21,39 @@ type RemotePlayer struct {
 
 type RemoteBall struct {
 	id      uint8
+	team    constants.Team
 	pos     vec.Vec2
 	vel     vec.Vec2
 	ownerId uint8
 }
 
-func main() {
-	log.SetPrefix("Server - ")
-	log.SetOutput(ioutil.Discard)
-
-	serverAddress, err := net.ResolveUDPAddr("udp", ":8083")
-	if err != nil {
-		log.Fatalln("Udp address:", err)
-	}
-
-	conn, err := net.ListenUDP("udp", serverAddress)
-	if err != nil {
-		log.Fatalln("Dial creation:", err)
-	}
-
-	log.Println("Listening on: 8083")
-
-	balls := sync.Map{}
-	balls.Store(0, &RemoteBall{
-		id:      0,
-		pos:     vec.NewVec2(300, 300),
-		vel:     vec.NewVec2(0, 0),
-		ownerId: 0,
-	})
-	balls.Store(1, &RemoteBall{
-		id:      1,
-		pos:     vec.NewVec2(600, 300),
-		vel:     vec.NewVec2(0, 0),
-		ownerId: NoOwner,
-	})
-
-	server := &Server{
-		players:      sync.Map{},
-		nextClientId: 0,
-		nextTeam:     constants.TeamOrange,
-		conn:         conn,
-		balls:        balls,
-	}
-
-	go server.Update()
-
-	packetListener := packets.NewPacketListener(server)
-	packetListener.Register(packets.Hello, handleHelloPacket)
-	packetListener.Register(packets.PlayerUpdate, handlePlayerUpdatePacket)
-	packetListener.Register(packets.Bye, handleByePacket)
-	packetListener.Register(packets.Fire, handleFirePacket)
-	packetListener.Listen(server.conn)
+type Server struct {
+	players      sync.Map
+	nextClientId uint32
+	nextTeam     constants.Team
+	conn         *net.UDPConn
+	balls        sync.Map
 }
 
 func (s *Server) Update() {
-	tickTime := time.Second / constants.TickRate
-
 	for {
 		start := time.Now()
 
-		s.CheckCollisions()
-		s.MoveBalls()
-		s.SendServerUpdate()
+		s.checkCollisions()
+		s.moveBalls()
+		s.sendServerUpdate()
 
-		if time.Since(start) < tickTime {
-			time.Sleep(tickTime - time.Since(start))
+		if time.Since(start) < constants.TickTime {
+			time.Sleep(constants.TickTime - time.Since(start))
 		}
 	}
 }
 
-func (s *Server) CheckCollisions() {
+func (s *Server) checkCollisions() {
 	s.players.Range(func(key, value any) bool {
 		remotePlayer := value.(*RemotePlayer)
+
+		// TODO There's a bug where you can pick up a ball that somebody is holding
 
 		// Picking up balls
 		s.balls.Range(func(key, value any) bool {
@@ -125,6 +70,7 @@ func (s *Server) CheckCollisions() {
 				})
 				if !isOwned {
 					ball.ownerId = remotePlayer.clientId
+					ball.team = remotePlayer.team
 				}
 			}
 			return true
@@ -139,16 +85,18 @@ func (s *Server) CheckCollisions() {
 
 		if remoteBall.pos.Y <= 0 || remoteBall.pos.Y+16 >= constants.ScreenHeight {
 			remoteBall.vel.Y *= -1
+			remoteBall.team = constants.NoTeam
 		}
 		if remoteBall.pos.X <= 0 || remoteBall.pos.X+16 >= constants.ScreenWidth {
 			remoteBall.vel.X *= -1
+			remoteBall.team = constants.NoTeam
 		}
 
 		return true
 	})
 }
 
-func (s *Server) MoveBalls() {
+func (s *Server) moveBalls() {
 	s.balls.Range(func(key, value any) bool {
 		remoteBall := value.(*RemoteBall)
 		if remoteBall.ownerId == 255 {
@@ -158,13 +106,13 @@ func (s *Server) MoveBalls() {
 	})
 }
 
-func (s *Server) SendServerUpdate() {
-	players := map[uint8]packets.PlayerData{}
+func (s *Server) sendServerUpdate() {
+	players := map[uint8]netman.PlayerData{}
 	s.players.Range(func(key, value any) bool {
 		clientId := key.(uint8)
 		player := value.(*RemotePlayer)
 
-		players[clientId] = packets.PlayerData{
+		players[clientId] = netman.PlayerData{
 			ClientId: clientId,
 			Team:     player.team,
 			Name:     player.name,
@@ -179,11 +127,11 @@ func (s *Server) SendServerUpdate() {
 	if len(players) > 0 {
 		timeStamp := time.Now()
 
-		ballsData := make([]packets.BallData, 0)
+		ballsData := make([]netman.BallData, 0)
 
 		s.balls.Range(func(key, value any) bool {
 			ball := value.(*RemoteBall)
-			ballsData = append(ballsData, packets.BallData{
+			ballsData = append(ballsData, netman.BallData{
 				Id:    ball.id,
 				Owner: ball.ownerId,
 				Pos:   ball.pos,
@@ -194,7 +142,7 @@ func (s *Server) SendServerUpdate() {
 		s.players.Range(func(key, value any) bool {
 			player := value.(*RemotePlayer)
 
-			packets.SendPacketTo(s.conn, player.addr, packets.ServerUpdate, packets.ServerUpdatePacketData{
+			netman.SendPacketTo(s.conn, player.addr, netman.ServerUpdate, netman.ServerUpdatePacketData{
 				PlayersData: players,
 				Balls:       ballsData,
 				Timestamp:   timeStamp,
@@ -203,77 +151,4 @@ func (s *Server) SendServerUpdate() {
 			return true
 		})
 	}
-}
-
-func handleHelloPacket(_ packets.PacketKind, addr net.Addr, _ interface{}, server interface{}) {
-	serverData := server.(*Server)
-	packets.SendPacketTo(serverData.conn, addr, packets.Welcome, packets.WelcomePacketData{
-		ClientId: uint8(serverData.nextClientId),
-		Team:     serverData.nextTeam,
-	})
-	atomic.AddUint32(&serverData.nextClientId, 1)
-	if serverData.nextTeam == constants.TeamOrange {
-		serverData.nextTeam = constants.TeamBlue
-	} else {
-		serverData.nextTeam = constants.TeamOrange
-	}
-
-	// TODO Registering should be happening here, right ?
-}
-
-func handlePlayerUpdatePacket(_ packets.PacketKind, addr net.Addr, data interface{}, server interface{}) {
-	playerUpdatePacketData := data.(packets.PlayerUpdatePacketData)
-	serverData := server.(*Server)
-
-	serverData.players.Store(playerUpdatePacketData.ClientId, &RemotePlayer{
-		clientId: playerUpdatePacketData.ClientId,
-		team:     playerUpdatePacketData.Team,
-		name:     playerUpdatePacketData.Name,
-		addr:     addr,
-		pos:      playerUpdatePacketData.Pos,
-		rotation: playerUpdatePacketData.Rotation,
-		inDash:   playerUpdatePacketData.InDash,
-	})
-}
-
-func handleByePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server interface{}) {
-	byePacketData := data.(packets.ByePacketData)
-	serverData := server.(*Server)
-
-	log.Println("Bye:", byePacketData.ClientId)
-	serverData.players.Delete(byePacketData.ClientId)
-
-	serverData.players.Range(func(key, value any) bool {
-		player := value.(*RemotePlayer)
-		packets.SendPacketTo(serverData.conn, player.addr, packets.ByeAck, packets.ByeAckPacketData{
-			ClientId: byePacketData.ClientId,
-		})
-		return true
-	})
-}
-
-func handleFirePacket(_ packets.PacketKind, _ net.Addr, data interface{}, server interface{}) {
-	firePacketData := data.(packets.FirePacketData)
-	serverData := server.(*Server)
-
-	serverData.balls.Range(func(key, value any) bool {
-		ball := value.(*RemoteBall)
-		if ball.ownerId == firePacketData.ClientId {
-			value, ok := serverData.players.Load(firePacketData.ClientId)
-			if !ok {
-				log.Fatalf("Couldn't find player with given client id: %d from fire packet data\n", firePacketData.ClientId)
-			}
-			remotePlayer := value.(*RemotePlayer)
-			newX := remotePlayer.pos.X + 16 - 8 + 40*math.Cos(remotePlayer.rotation) // TODO Hardcoded
-			newY := remotePlayer.pos.Y + 16 - 8 + 40*math.Sin(remotePlayer.rotation)
-			ball.pos.Set(newX, newY)
-
-			ball.vel = vec.NewVec2(math.Cos(remotePlayer.rotation), math.Sin(remotePlayer.rotation)).
-				Normalized().
-				Muled(3) // TODO Vector builder ?
-
-			ball.ownerId = NoOwner
-		}
-		return true
-	})
 }

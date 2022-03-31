@@ -2,12 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/JanCieslak/Zbijak/client/game"
+	"github.com/JanCieslak/Zbijak/client/player"
 	"github.com/JanCieslak/zbijak/common/constants"
-	"github.com/JanCieslak/zbijak/common/packets"
+	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/hajimehoshi/ebiten/v2"
 	"log"
-	"net"
 	"sync"
 	"time"
 )
@@ -24,33 +23,34 @@ func main() {
 	//}
 	name := "jcs"
 
-	serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
-	if err != nil {
-		log.Fatalln("Udp address:", err)
-	}
+	//serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
+	//if err != nil {
+	//	log.Fatalln("Udp address:", err)
+	//}
 
-	conn, err := net.DialUDP("udp", nil, serverAddress)
-	if err != nil {
-		log.Fatalln("Dial creation:", err)
-	}
+	netman.SetDefaultDestination("127.0.0.1:8083")
+
+	//conn, err := net.DialUDP("udp", nil, serverAddress)
+	//if err != nil {
+	//	log.Fatalln("Dial creation:", err)
+	//}
 
 	// TODO Use reliable connection
-	clientId, team := game.Hello(conn)
+	clientId, team := Hello()
 
 	fmt.Println("Client id", clientId)
 
-	g := &game.Game{
+	g := &Game{
 		Id:               clientId,
 		Team:             team,
 		Name:             name,
-		Player:           game.NewPlayer(250, 250), // TODO Get from the server ?
-		Conn:             conn,
+		Player:           player.NewPlayer(clientId, 250, 250), // TODO Get from the server ? (Pos)
 		RemotePlayers:    sync.Map{},
 		RemoteBalls:      sync.Map{},
 		LastServerUpdate: time.Now(),
 	}
 
-	g.PacketListener = packets.NewPacketListener(g)
+	g.PacketListener = netman.NewPacketListener(g)
 
 	ebiten.SetWindowTitle("Zbijak")
 	ebiten.SetWindowResizable(true)
@@ -68,5 +68,5 @@ func main() {
 	// TODO find better way of waiting
 	time.Sleep(time.Millisecond * 250)
 	// TODO Use reliable connection
-	game.Bye(g)
+	Bye(g)
 }

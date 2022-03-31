@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/JanCieslak/zbijak/common v0.0.0-20220219130121-a4850142f605
 	github.com/hajimehoshi/ebiten/v2 v2.2.4
-	golang.org/x/image v0.0.0-20211028202545-6944b10bf410
+	golang.org/x/image v0.0.0-20220321031419-a8550c1d254a
 )
 
 replace github.com/JanCieslak/zbijak/common => ../common

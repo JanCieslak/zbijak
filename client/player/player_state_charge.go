@@ -1,7 +1,8 @@
-package game
+package player
 
 import (
-	"github.com/JanCieslak/zbijak/common/packets"
+	"github.com/JanCieslak/zbijak/common"
+	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/hajimehoshi/ebiten/v2"
 	"reflect"
 	"time"
@@ -11,12 +12,12 @@ type ChargePlayerState struct {
 	startTime time.Time
 }
 
-func (s ChargePlayerState) Update(g *Game, p *Player) {
+func (s ChargePlayerState) Update(p *Player) {
 	if !ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
 		p.PlayerState = NormalPlayerState{}
 
-		packets.Send(g.Conn, packets.Fire, packets.FirePacketData{
-			ClientId: g.Id,
+		netman.SendUnreliable(netman.Fire, netman.FirePacketData{
+			ClientId: p.Id,
 		})
 	}
 
@@ -25,7 +26,7 @@ func (s ChargePlayerState) Update(g *Game, p *Player) {
 
 		p.Velocity.Normalize()
 		if interpolationFactor < 1 {
-			speed := packets.Lerp(NormalSpeed, FullChargeSpeed, interpolationFactor)
+			speed := common.Lerp(NormalSpeed, FullChargeSpeed, interpolationFactor)
 			//log.Println("Interpolation factor", interpolationFactor, "Speed", speed)
 			p.Velocity.Mul(speed)
 		} else {
