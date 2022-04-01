@@ -3,17 +3,13 @@ package main
 import (
 	"fmt"
 	"github.com/JanCieslak/Zbijak/client/player"
-	"github.com/JanCieslak/zbijak/common"
+	"github.com/JanCieslak/Zbijak/client/utils"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-	"github.com/hajimehoshi/ebiten/v2/text"
-	"golang.org/x/image/font/inconsolata"
-	"golang.org/x/image/math/f64"
 	"image/color"
-	_ "image/png"
 	"math"
 	"reflect"
 	"sync"
@@ -39,17 +35,22 @@ type Game struct {
 	Team          constants.Team
 	Name          string
 	Player        *player.Player
-	RemotePlayers sync.Map // TODO Abstract - World
+	RemotePlayers sync.Map // TODO Abstract - World struct ?
 	RemoteBalls   sync.Map
 
 	LastServerUpdate time.Time
 	serverUpdates    []netman.ServerUpdatePacketData
-	PacketListener   netman.PacketListener
 }
 
 func (g *Game) Update() error {
 	g.Player.Update()
 
+	// TODO Player update should be sending as little data as possible
+	// Probably ideally:
+	// - id
+	// - mouse position and mouse + keyboard inputs
+	// - rotation (?)
+	// The rest should be tracked and evaluated by server (single source of truth)
 	netman.SendUnreliable(netman.PlayerUpdate, netman.PlayerUpdatePacketData{
 		ClientId: g.Id,
 		Team:     g.Team,
@@ -59,7 +60,14 @@ func (g *Game) Update() error {
 		InDash:   reflect.TypeOf(g.Player.MovementState) == reflect.TypeOf(player.DashMovementState{}),
 	})
 
-	renderTime := time.Now().Add(-constants.InterpolationOffset * time.Millisecond)
+	g.InterpolateRemoteObjectsPositions()
+
+	return nil
+}
+
+func (g *Game) InterpolateRemoteObjectsPositions() {
+	renderTime := time.Now().Add(-constants.InterpolationOffset)
+
 	if len(g.serverUpdates) > 1 {
 		for len(g.serverUpdates) > 2 && renderTime.After(g.serverUpdates[1].Timestamp) {
 			g.serverUpdates = append(g.serverUpdates[:0], g.serverUpdates[1:]...)
@@ -76,9 +84,9 @@ func (g *Game) Update() error {
 				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
 
 				if ok0 && ok1 {
-					newX := common.Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
-					newY := common.Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
-					newRotation := common.Lerp(playerOne.Rotation, playerTwo.Rotation, interpolationFactor)
+					newX := utils.Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
+					newY := utils.Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
+					newRotation := utils.Lerp(playerOne.Rotation, playerTwo.Rotation, interpolationFactor)
 
 					remotePlayer.pos.Set(newX, newY)
 					remotePlayer.rotation = newRotation
@@ -86,85 +94,43 @@ func (g *Game) Update() error {
 
 				return true
 			})
-			// Extrapolation TODO Test
-		} else if renderTime.After(g.serverUpdates[1].Timestamp) {
-			fmt.Println("HEY") // TODO not calling
-			extrapolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())/float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) - 1.0
-			g.RemotePlayers.Range(func(key, value any) bool {
-				clientId := key.(uint8)
-				remotePlayer := value.(*RemotePlayer)
-
-				playerOne, ok0 := g.serverUpdates[0].PlayersData[clientId]
-				playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
-
-				if ok0 && ok1 {
-					positionDelta := f64.Vec2{playerTwo.Pos.X - playerOne.Pos.X, playerTwo.Pos.Y - playerOne.Pos.Y}
-					newX := playerTwo.Pos.X + (positionDelta[0] * extrapolationFactor)
-					newY := playerTwo.Pos.Y + (positionDelta[1] * extrapolationFactor)
-
-					remotePlayer.pos.Set(newX, newY)
-				}
-
-				return true
-			})
 		}
+		// TODO Extrapolation (should be working, but it's not. It's not necessary, at least for now. The game looks and feels smooth)
+		//} else if renderTime.After(g.serverUpdates[1].Timestamp) {
+		//	fmt.Println("HEY") // TODO not calling
+		//	extrapolationFactor := float64(renderTime.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli())/float64(g.serverUpdates[1].Timestamp.UnixMilli()-g.serverUpdates[0].Timestamp.UnixMilli()) - 1.0
+		//	g.RemotePlayers.Range(func(key, value any) bool {
+		//		clientId := key.(uint8)
+		//		remotePlayer := value.(*RemotePlayer)
+		//
+		//		playerOne, ok0 := g.serverUpdates[0].PlayersData[clientId]
+		//		playerTwo, ok1 := g.serverUpdates[1].PlayersData[clientId]
+		//
+		//		if ok0 && ok1 {
+		//			positionDelta := f64.Vec2{playerTwo.Pos.X - playerOne.Pos.X, playerTwo.Pos.Y - playerOne.Pos.Y}
+		//			newX := playerTwo.Pos.X + (positionDelta[0] * extrapolationFactor)
+		//			newY := playerTwo.Pos.Y + (positionDelta[1] * extrapolationFactor)
+		//
+		//			remotePlayer.pos.Set(newX, newY)
+		//		}
+		//
+		//		return true
+		//	})
+		//}
 	}
-
-	return nil
 }
-
-var (
-	circleOutlineImage = loadImage("resources/circle.png", 0.2)
-	circleImage        = loadImage("resources/filled_circle.png", 1.0)
-
-	OrangeTeamColor = color.RGBA{R: 235, G: 131, B: 52, A: 255}
-	BlueTeamColor   = color.RGBA{R: 52, G: 158, B: 235, A: 255}
-)
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
-	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	//ebitenutil.DrawRect(screen, 0, 0, constants.ScreenWidth, constants.ScreenHeight, white)
-	var teamColor color.Color
-	if g.Team == constants.TeamOrange {
-		teamColor = OrangeTeamColor
-	} else {
-		teamColor = BlueTeamColor
-	}
 
-	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
-	ebitenutil.DebugPrint(screen, info)
-
-	for _, update := range g.serverUpdates {
-		// TODO fix jumping ballz (this may be happening because ebiten.GetMousePosition() gets position from other windows from time to time ?)
-		// TODO It's a interpolation thing (jump from almost full rotation value to 0 - it will try to interpolate whole circle)
-		for _, b := range update.Balls {
-			ballOwner, hasOwner := update.PlayersData[b.Owner]
-			if hasOwner {
-				bx := ballOwner.Pos.X + 16 - 7.5 + 40*math.Cos(ballOwner.Rotation)
-				by := ballOwner.Pos.Y + 16 - 7.5 + 40*math.Sin(ballOwner.Rotation)
-				drawCircleOutline(screen, bx, by, 0.5)
-			} else {
-				drawCircleOutline(screen, b.Pos.X, b.Pos.Y, 0.5)
-			}
-		}
-		for _, p := range update.PlayersData {
-			drawCircleOutline(screen, p.Pos.X, p.Pos.Y, 1)
-		}
-	}
+	g.DebugDraw(screen)
 
 	g.RemotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.Id {
-			if remotePlayer.team == constants.TeamOrange {
-				drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1, OrangeTeamColor)
-			} else {
-				drawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, 1, BlueTeamColor)
-			}
-			face := inconsolata.Bold8x16
-			textBounds := text.BoundString(face, g.Name)
-			text.Draw(screen, remotePlayer.name, face, int(remotePlayer.pos.X+constants.PlayerRadius)-textBounds.Dx()/2, int(remotePlayer.pos.Y+constants.PlayerRadius)+3, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+			utils.DrawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(remotePlayer.team))
+			utils.DrawText(screen, "jcs", remotePlayer.pos.X, remotePlayer.pos.Y)
 		}
 		return true
 	})
@@ -175,61 +141,51 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		remotePlayer, hasOwner := g.RemotePlayers.Load(remoteBall.OwnerId)
 		if hasOwner {
 			ballOwner := remotePlayer.(*RemotePlayer)
+			// TODO Not The same ?
 			if remoteBall.OwnerId == g.Id {
-				bx := g.Player.Pos.X + 16 - 8 + 40*math.Cos(g.Player.Rotation)
-				by := g.Player.Pos.Y + 16 - 8 + 40*math.Sin(g.Player.Rotation)
-				drawCircle(screen, bx, by, 0.5, teamColor)
+				bx := g.Player.Pos.X + constants.BallOrbitRadius*math.Cos(g.Player.Rotation)
+				by := g.Player.Pos.Y + constants.BallOrbitRadius*math.Sin(g.Player.Rotation)
+				utils.DrawCircle(screen, bx, by, constants.BallRadius, 0.5, utils.GetTeamColor(g.Team))
 			} else {
-				bx := ballOwner.pos.X + 16 - 8 + 40*math.Cos(ballOwner.rotation)
-				by := ballOwner.pos.Y + 16 - 8 + 40*math.Sin(ballOwner.rotation)
-				if ballOwner.team == constants.TeamOrange {
-					drawCircle(screen, bx, by, 0.5, OrangeTeamColor)
-				} else {
-					drawCircle(screen, bx, by, 0.5, BlueTeamColor)
-				}
+				bx := ballOwner.pos.X + constants.BallOrbitRadius*math.Cos(ballOwner.rotation)
+				by := ballOwner.pos.Y + constants.BallOrbitRadius*math.Sin(ballOwner.rotation)
+				utils.DrawCircle(screen, bx, by, constants.BallRadius, 0.5, utils.GetTeamColor(ballOwner.team))
 			}
 		} else {
-			drawCircle(screen, remoteBall.Pos.X, remoteBall.Pos.Y, 0.5, white)
+			utils.DrawCircle(screen, remoteBall.Pos.X, remoteBall.Pos.Y, constants.BallRadius, 0.5, color.White)
 		}
 		return true
 	})
 
-	drawCircle(screen, g.Player.Pos.X, g.Player.Pos.Y, 1, teamColor)
+	g.Player.Draw(screen)
+}
 
-	face := inconsolata.Bold8x16
-	textBounds := text.BoundString(face, g.Name)
-	text.Draw(screen, g.Name, face, int(g.Player.Pos.X+constants.PlayerRadius)-textBounds.Dx()/2, int(g.Player.Pos.Y+constants.PlayerRadius)+3, color.RGBA{R: 0, G: 0, B: 0, A: 255})
+func (g *Game) DebugDraw(screen *ebiten.Image) {
+	info := fmt.Sprintf("Fps: %f Tps: %f", ebiten.CurrentFPS(), ebiten.CurrentTPS())
+	ebitenutil.DebugPrint(screen, info)
+
+	for _, update := range g.serverUpdates {
+		// TODO fix jumping ballz (this may be happening because ebiten.GetMousePosition() gets position from other windows from time to time ?)
+		// TODO It's a interpolation thing (jump from almost full rotation value to 0 - it will try to interpolate whole circle)
+		// Draw ball's buffered positions
+		for _, b := range update.Balls {
+			ballOwner, hasOwner := update.PlayersData[b.Owner]
+			if hasOwner {
+				bx := ballOwner.Pos.X + constants.BallOrbitRadius*math.Cos(ballOwner.Rotation)
+				by := ballOwner.Pos.Y + constants.BallOrbitRadius*math.Sin(ballOwner.Rotation)
+				utils.DrawCircleOutline(screen, bx, by, constants.BallRadius, 0.5)
+			} else {
+				utils.DrawCircleOutline(screen, b.Pos.X, b.Pos.Y, constants.BallRadius, 0.5)
+			}
+		}
+
+		// Draw player's buffered positions
+		for _, p := range update.PlayersData {
+			utils.DrawCircleOutline(screen, p.Pos.X, p.Pos.Y, constants.PlayerRadius, 1)
+		}
+	}
 }
 
 func (g *Game) Layout(_, _ int) (int, int) {
 	return constants.ScreenWidth, constants.ScreenHeight
-}
-
-func (g *Game) RegisterCallbacks() {
-	g.PacketListener.Register(netman.ServerUpdate, handleServerUpdatePacket)
-	g.PacketListener.Register(netman.ByeAck, handleByeAckPacket)
-	go g.PacketListener.Listen2()
-}
-
-func (g *Game) ShutDown() {
-	g.PacketListener.ShutDown()
-}
-
-func Hello() (uint8, constants.Team) {
-	netman.SendUnreliable(netman.Hello, netman.HelloPacketData{})
-
-	var welcomePacket netman.Packet[netman.WelcomePacketData]
-	netman.ReceiveUnreliable(&welcomePacket)
-	welcomePacketData := welcomePacket.Data
-
-	return welcomePacketData.ClientId, welcomePacketData.Team
-}
-
-func Bye(game *Game) {
-	netman.SendUnreliable(netman.Bye, netman.ByePacketData{
-		ClientId: game.Id,
-	})
-
-	var byeAckPacket netman.Packet[netman.ByeAckPacketData]
-	netman.ReceiveUnreliable(&byeAckPacket)
 }

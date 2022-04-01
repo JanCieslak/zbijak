@@ -1,15 +1,12 @@
 package player
 
 import (
+	"github.com/JanCieslak/Zbijak/client/utils"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"math"
 	"time"
-)
-
-var (
-	RotationBase = vec.Right
 )
 
 const (
@@ -25,6 +22,7 @@ const (
 
 type Player struct {
 	Id            uint8
+	Team          constants.Team
 	Pos           vec.Vec2
 	Velocity      vec.Vec2
 	MovementState State
@@ -32,9 +30,10 @@ type Player struct {
 	Rotation      float64
 }
 
-func NewPlayer(id uint8, x, y float64) *Player {
+func NewPlayer(id uint8, team constants.Team, x, y float64) *Player {
 	return &Player{
 		Id:       id,
+		Team:     team,
 		Pos:      vec.Vec2{X: x, Y: y},
 		Velocity: vec.Vec2{},
 		MovementState: NormalMovementState{
@@ -61,15 +60,13 @@ func (p *Player) Update() {
 	}
 
 	mx, my := ebiten.CursorPosition()
-	// TODO Radius 32
-	cp := vec.NewVec2(p.Pos.X+16, p.Pos.Y+16)
-	mVec := vec.NewIVec2(mx, my)
-	if mVec.Y > cp.Y {
-		mVec.SubVec(cp)
-		p.Rotation = math.Acos(vec.Right.Dot(mVec) / (vec.Right.Len() * mVec.Len()))
+	cursorVec := vec.NewIVec2(mx, my)
+	if cursorVec.Y > p.Pos.Y {
+		cursorVec.SubVec(p.Pos)
+		p.Rotation = math.Acos(vec.Right.Dot(cursorVec) / (vec.Right.Len() * cursorVec.Len()))
 	} else {
-		mVec.SubVec(cp)
-		p.Rotation = math.Pi + math.Acos(-vec.Right.Dot(mVec)/(vec.Right.Len()*mVec.Len()))
+		cursorVec.SubVec(p.Pos)
+		p.Rotation = math.Pi + math.Acos(-vec.Right.Dot(cursorVec)/(vec.Right.Len()*cursorVec.Len()))
 	}
 
 	moveVector.Normalize()
@@ -81,18 +78,23 @@ func (p *Player) Update() {
 	p.Pos.AddVec(p.Velocity)
 
 	// Wall collisions
-	if p.Pos.X <= 0 {
-		p.Pos.X = 0
+	if p.Pos.X-constants.PlayerRadius <= 0 {
+		p.Pos.X = constants.PlayerRadius
 	}
-	if p.Pos.X+32 >= constants.ScreenWidth {
-		p.Pos.X = constants.ScreenWidth - 32
+	if p.Pos.X+constants.PlayerRadius >= constants.ScreenWidth {
+		p.Pos.X = constants.ScreenWidth - constants.PlayerRadius
 	}
-	if p.Pos.Y <= 0 {
-		p.Pos.Y = 0
+	if p.Pos.Y-constants.PlayerRadius <= 0 {
+		p.Pos.Y = constants.PlayerRadius
 	}
-	if p.Pos.Y+32 >= constants.ScreenHeight {
-		p.Pos.Y = constants.ScreenHeight - 32
+	if p.Pos.Y+constants.PlayerRadius >= constants.ScreenHeight {
+		p.Pos.Y = constants.ScreenHeight - constants.PlayerRadius
 	}
 
 	// TODO ball wall conditions (now one can throw ball outside of the screen) ;/
+}
+
+func (p *Player) Draw(screen *ebiten.Image) {
+	utils.DrawCircle(screen, p.Pos.X, p.Pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(p.Team))
+	utils.DrawText(screen, "jcs", p.Pos.X, p.Pos.Y) // TODO name
 }

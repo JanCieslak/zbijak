@@ -1,4 +1,4 @@
-package common
+package utils
 
 func MapValue(x, inMin, inMax, outMin, outMax float64) float64 {
 	return (x-inMin)*(outMax-outMin)/(inMax-inMin) + outMin

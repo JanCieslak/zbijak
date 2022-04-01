@@ -4,29 +4,20 @@ import (
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/JanCieslak/zbijak/common/vec"
-	"io/ioutil"
 	"log"
-	"net"
 	"sync"
 )
 
 func main() {
 	log.SetPrefix("Server - ")
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 
-	serverAddress, err := net.ResolveUDPAddr("udp", ":8083")
-	if err != nil {
-		log.Fatalln("Udp address:", err)
-	}
-
-	conn, err := net.ListenUDP("udp", serverAddress)
-	if err != nil {
-		log.Fatalln("Dial creation:", err)
-	}
-
+	netman.InitializeServerSockets(":8083")
 	log.Println("Listening on: 8083")
 
 	balls := sync.Map{}
+
+	// TODO Testing balls
 	balls.Store(0, &RemoteBall{
 		id:      0,
 		pos:     vec.NewVec2(300, 300),
@@ -44,7 +35,6 @@ func main() {
 		players:      sync.Map{},
 		nextClientId: 0,
 		nextTeam:     constants.TeamOrange,
-		conn:         conn,
 		balls:        balls,
 	}
 
@@ -55,5 +45,5 @@ func main() {
 	packetListener.Register(netman.PlayerUpdate, handlePlayerUpdatePacket)
 	packetListener.Register(netman.Bye, handleByePacket)
 	packetListener.Register(netman.Fire, handleFirePacket)
-	packetListener.Listen(server.conn)
+	packetListener.Listen()
 }

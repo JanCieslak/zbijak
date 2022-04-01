@@ -12,11 +12,14 @@ import (
 
 func handleHelloPacket(_ netman.PacketKind, addr net.Addr, _ interface{}, server interface{}) {
 	serverData := server.(*Server)
-	netman.SendPacketTo(serverData.conn, addr, netman.Welcome, netman.WelcomePacketData{
+
+	netman.SendToUnreliable(addr, netman.Welcome, netman.WelcomePacketData{
 		ClientId: uint8(serverData.nextClientId),
 		Team:     serverData.nextTeam,
 	})
+
 	atomic.AddUint32(&serverData.nextClientId, 1)
+
 	if serverData.nextTeam == constants.TeamOrange {
 		serverData.nextTeam = constants.TeamBlue
 	} else {
@@ -50,7 +53,7 @@ func handleByePacket(_ netman.PacketKind, _ net.Addr, data interface{}, server i
 
 	serverData.players.Range(func(key, value any) bool {
 		player := value.(*RemotePlayer)
-		netman.SendPacketTo(serverData.conn, player.addr, netman.ByeAck, netman.ByeAckPacketData{
+		netman.SendToUnreliable(player.addr, netman.ByeAck, netman.ByeAckPacketData{
 			ClientId: byePacketData.ClientId,
 		})
 		return true

@@ -1,7 +1,7 @@
 package player
 
 import (
-	"github.com/JanCieslak/zbijak/common"
+	"github.com/JanCieslak/Zbijak/client/utils"
 	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/hajimehoshi/ebiten/v2"
 	"reflect"
@@ -26,7 +26,7 @@ func (s ChargePlayerState) Update(p *Player) {
 
 		p.Velocity.Normalize()
 		if interpolationFactor < 1 {
-			speed := common.Lerp(NormalSpeed, FullChargeSpeed, interpolationFactor)
+			speed := utils.Lerp(NormalSpeed, FullChargeSpeed, interpolationFactor)
 			//log.Println("Interpolation factor", interpolationFactor, "Speed", speed)
 			p.Velocity.Mul(speed)
 		} else {

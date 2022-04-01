@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/JanCieslak/Zbijak/client/player"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/netman"
@@ -14,6 +13,7 @@ import (
 func main() {
 	log.SetPrefix("Client - ")
 
+	// TODO Uncomment when releasing
 	//name, ok := inputbox.InputBox("Enter your name", "Type 3 char name", "abc")
 	//if !ok {
 	//	log.Fatalln("No value entered")
@@ -23,34 +23,24 @@ func main() {
 	//}
 	name := "jcs"
 
-	//serverAddress, err := net.ResolveUDPAddr("udp", "127.0.0.1:8083")
-	//if err != nil {
-	//	log.Fatalln("Udp address:", err)
-	//}
-
-	netman.SetDefaultDestination("127.0.0.1:8083")
-
-	//conn, err := net.DialUDP("udp", nil, serverAddress)
-	//if err != nil {
-	//	log.Fatalln("Dial creation:", err)
-	//}
+	netman.InitializeClientSockets("127.0.0.1:8083")
 
 	// TODO Use reliable connection
-	clientId, team := Hello()
+	clientId, team := hello()
 
-	fmt.Println("Client id", clientId)
+	log.Println("Client id:", clientId)
 
 	g := &Game{
 		Id:               clientId,
 		Team:             team,
 		Name:             name,
-		Player:           player.NewPlayer(clientId, 250, 250), // TODO Get from the server ? (Pos)
+		Player:           player.NewPlayer(clientId, team, 250, 250), // TODO Get position from the server
 		RemotePlayers:    sync.Map{},
 		RemoteBalls:      sync.Map{},
 		LastServerUpdate: time.Now(),
 	}
 
-	g.PacketListener = netman.NewPacketListener(g)
+	packetListener := netman.NewPacketListener(g)
 
 	ebiten.SetWindowTitle("Zbijak")
 	ebiten.SetWindowResizable(true)
@@ -58,15 +48,37 @@ func main() {
 	ebiten.SetFPSMode(ebiten.FPSModeVsyncOffMaximum)
 	ebiten.SetMaxTPS(constants.TickRate)
 
-	g.RegisterCallbacks()
+	packetListener.Register(netman.ServerUpdate, handleServerUpdatePacket)
+	packetListener.Register(netman.ByeAck, handleByeAckPacket)
+	go packetListener.Listen()
 
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatalln(err)
 	}
 
-	g.ShutDown()
-	// TODO find better way of waiting
+	packetListener.ShutDown()
 	time.Sleep(time.Millisecond * 250)
 	// TODO Use reliable connection
-	Bye(g)
+	bye(g)
+}
+
+func hello() (uint8, constants.Team) {
+	log.Println("Sending Hello packet")
+	netman.SendUnreliable(netman.Hello, netman.HelloPacketData{})
+
+	var welcomePacket netman.Packet[netman.WelcomePacketData]
+	netman.ReceiveUnreliable(&welcomePacket)
+	welcomePacketData := welcomePacket.Data
+
+	return welcomePacketData.ClientId, welcomePacketData.Team
+}
+
+func bye(game *Game) {
+	log.Println("Sending Bye packet")
+	netman.SendUnreliable(netman.Bye, netman.ByePacketData{
+		ClientId: game.Id,
+	})
+
+	var byeAckPacket netman.Packet[netman.ByeAckPacketData]
+	netman.ReceiveUnreliable(&byeAckPacket)
 }

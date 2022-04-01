@@ -58,7 +58,7 @@ func (s *Server) checkCollisions() {
 		// Picking up balls
 		s.balls.Range(func(key, value any) bool {
 			ball := value.(*RemoteBall)
-			if remotePlayer.pos.AddVecRet(vec.NewVec2(16, 16)).IsWithinRadius(ball.pos, 25) { // TODO Hardcoded
+			if remotePlayer.pos.IsWithinRadius(ball.pos, 25) { // TODO Hardcoded
 				isOwned := false
 				s.balls.Range(func(key, value any) bool {
 					innerBall := value.(*RemoteBall)
@@ -83,11 +83,11 @@ func (s *Server) checkCollisions() {
 	s.balls.Range(func(key, value any) bool {
 		remoteBall := value.(*RemoteBall)
 
-		if remoteBall.pos.Y <= 0 || remoteBall.pos.Y+16 >= constants.ScreenHeight {
+		if remoteBall.pos.Y <= 0 || remoteBall.pos.Y+constants.BallRadius >= constants.ScreenHeight {
 			remoteBall.vel.Y *= -1
 			remoteBall.team = constants.NoTeam
 		}
-		if remoteBall.pos.X <= 0 || remoteBall.pos.X+16 >= constants.ScreenWidth {
+		if remoteBall.pos.X <= 0 || remoteBall.pos.X+constants.BallRadius >= constants.ScreenWidth {
 			remoteBall.vel.X *= -1
 			remoteBall.team = constants.NoTeam
 		}
@@ -142,7 +142,7 @@ func (s *Server) sendServerUpdate() {
 		s.players.Range(func(key, value any) bool {
 			player := value.(*RemotePlayer)
 
-			netman.SendPacketTo(s.conn, player.addr, netman.ServerUpdate, netman.ServerUpdatePacketData{
+			netman.SendToUnreliable(player.addr, netman.ServerUpdate, netman.ServerUpdatePacketData{
 				PlayersData: players,
 				Balls:       ballsData,
 				Timestamp:   timeStamp,

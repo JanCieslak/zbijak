@@ -6,9 +6,10 @@ const (
 	ScreenWidth         = 640
 	ScreenHeight        = 480
 	TickRate            = 144
-	InterpolationOffset = 100
+	InterpolationOffset = 100 * time.Millisecond
 	PlayerRadius        = 16
 	BallRadius          = 8
+	BallOrbitRadius     = 40
 	TickTime            = time.Second / TickRate
 )
 

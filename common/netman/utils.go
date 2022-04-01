@@ -1,84 +1,28 @@
 package netman
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"log"
-	"net"
+	"sync/atomic"
 )
 
-func ReceivePacketWithAddr(conn net.PacketConn) (net.Addr, []byte) {
-	buffer := make([]byte, 1024)
-
-	//log.Printf("[%v] Receiving packet...", conn.LocalAddr())
-	_, addr, err := conn.ReadFrom(buffer)
-	if err != nil {
-		log.Fatalln("Error when reading packet:", err)
-	}
-
-	dataLen := binary.BigEndian.Uint16(buffer[0:])
-	return addr, buffer[2 : dataLen+2]
+type AtomicBool struct {
+	value int32
 }
 
-func ReceivePacket[T PacketData](client bool, conn *net.UDPConn, packet *Packet[T]) {
-	buffer := make([]byte, 1024)
-
-	//log.Printf("[%v] Receiving packet...", conn.LocalAddr())
-	if client {
-		_, err := conn.Read(buffer)
-		if err != nil {
-			log.Fatalln("Receive Packet Client error:", err)
-		}
-	} else {
-		_, _, err := conn.ReadFromUDP(buffer)
-		if err != nil {
-			log.Fatalln("Receive Packet Server error:", err)
-		}
+func (b *AtomicBool) Set(value bool) {
+	var i int32 = 0
+	if value {
+		i = 1
 	}
-
-	dataLen := binary.BigEndian.Uint16(buffer[0:])
-	bytes := buffer[2 : dataLen+2]
-
-	err := json.Unmarshal(bytes, &packet)
-	if err != nil {
-		log.Fatalln("Error when deserializing packet")
-	}
+	atomic.StoreInt32(&b.value, i)
 }
 
-func SendPacketTo[T PacketData](conn net.PacketConn, toAddr net.Addr, packetKind PacketKind, packetData T) {
-	var packet Packet[T]
-	packet.Kind = packetKind
-	packet.Data = packetData
-	data := serialize(packet)
-
-	buffer := make([]byte, 2)
-	dataLen := uint16(len(data))
-	binary.BigEndian.PutUint16(buffer, dataLen)
-
-	buffer = append(buffer, data...)
-
-	_, err := conn.WriteTo(buffer, toAddr)
-	if err != nil {
-		log.Fatalf("Sending packet to %v error: %v", toAddr, err)
+func (b *AtomicBool) Get() bool {
+	if atomic.LoadInt32(&b.value) != 0 {
+		return true
 	}
-}
-
-func Send2[T PacketData](conn *net.UDPConn, packetKind PacketKind, packetData T) {
-	var packet Packet[T]
-	packet.Kind = packetKind
-	packet.Data = packetData
-	data := serialize(packet)
-
-	buffer := make([]byte, 2)
-	dataLen := uint16(len(data))
-	binary.BigEndian.PutUint16(buffer, dataLen)
-
-	buffer = append(buffer, data...)
-
-	_, err := conn.Write(buffer)
-	if err != nil {
-		log.Fatalln("Sending packet error:", err)
-	}
+	return false
 }
 
 // TODO Abstract to insert better serializer
@@ -97,7 +41,7 @@ func deserialize[T PacketData](bytes []byte, packet *Packet[T]) {
 	}
 }
 
-func PacketKindFromBytes(bytes []byte) PacketKind {
+func packetKindFromBytes(bytes []byte) PacketKind {
 	type AnyKindPacket struct {
 		Kind PacketKind
 		Data any
