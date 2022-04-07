@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 )
 
-func handleHelloPacket(_ netman.PacketKind, addr net.Addr, _ interface{}, server interface{}) {
+func handleHelloPacket(_ netman.PacketKind, conn *net.TCPConn, _ interface{}, server interface{}) {
 	serverData := server.(*Server)
 
-	netman.SendToUnreliable(addr, netman.Welcome, netman.WelcomePacketData{
+	netman.SendReliableWithConn(conn, netman.Welcome, netman.WelcomePacketData{
 		ClientId: uint8(serverData.nextClientId),
 		Team:     serverData.nextTeam,
 	})
@@ -26,7 +26,7 @@ func handleHelloPacket(_ netman.PacketKind, addr net.Addr, _ interface{}, server
 		serverData.nextTeam = constants.TeamOrange
 	}
 
-	// TODO Registering should be happening here, right ?
+	// TODO Registering should be happening here ? (right now, it's in handlePlayerUpdatePacket)
 }
 
 func handlePlayerUpdatePacket(_ netman.PacketKind, addr net.Addr, data interface{}, server interface{}) {
@@ -44,19 +44,16 @@ func handlePlayerUpdatePacket(_ netman.PacketKind, addr net.Addr, data interface
 	})
 }
 
-func handleByePacket(_ netman.PacketKind, _ net.Addr, data interface{}, server interface{}) {
+// TODO receive Reliably and then Reliably broadcast message to all of the connected peers
+func handleByePacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, server interface{}) {
 	byePacketData := data.(netman.ByePacketData)
 	serverData := server.(*Server)
 
 	log.Println("Bye:", byePacketData.ClientId)
 	serverData.players.Delete(byePacketData.ClientId)
 
-	serverData.players.Range(func(key, value any) bool {
-		player := value.(*RemotePlayer)
-		netman.SendToUnreliable(player.addr, netman.ByeAck, netman.ByeAckPacketData{
-			ClientId: byePacketData.ClientId,
-		})
-		return true
+	netman.BroadcastReliable(netman.ByeAck, netman.ByeAckPacketData{
+		ClientId: byePacketData.ClientId,
 	})
 }
 
@@ -72,13 +69,13 @@ func handleFirePacket(_ netman.PacketKind, _ net.Addr, data interface{}, server 
 				log.Fatalf("Couldn't find player with given client id: %d from fire packet data\n", firePacketData.ClientId)
 			}
 			remotePlayer := value.(*RemotePlayer)
-			newX := remotePlayer.pos.X + 16 - 8 + 40*math.Cos(remotePlayer.rotation) // TODO Hardcoded
-			newY := remotePlayer.pos.Y + 16 - 8 + 40*math.Sin(remotePlayer.rotation)
+			newX := remotePlayer.pos.X + constants.BallOrbitRadius*math.Cos(remotePlayer.rotation)
+			newY := remotePlayer.pos.Y + constants.BallOrbitRadius*math.Sin(remotePlayer.rotation)
 			ball.pos.Set(newX, newY)
 
 			ball.vel = vec.NewVec2(math.Cos(remotePlayer.rotation), math.Sin(remotePlayer.rotation)).
 				Normalized().
-				Muled(3) // TODO Vector builder ?
+				Muled(3) // TODO Vector builder ? (overall, better vec struct - package ?)
 
 			ball.ownerId = constants.NoTeam
 		}

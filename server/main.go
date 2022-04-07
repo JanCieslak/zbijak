@@ -12,7 +12,6 @@ func main() {
 	log.SetPrefix("Server - ")
 	//log.SetOutput(ioutil.Discard)
 
-	netman.InitializeServerSockets(":8083")
 	log.Println("Listening on: 8083")
 
 	balls := sync.Map{}
@@ -38,12 +37,16 @@ func main() {
 		balls:        balls,
 	}
 
-	go server.Update()
+	netman.InitializeServerSockets(":8083", ":8084", server)
+	netman.RegisterTCP(netman.Hello, handleHelloPacket)
+	netman.RegisterTCP(netman.Bye, handleByePacket)
+	netman.RegisterUDP(netman.PlayerUpdate, handlePlayerUpdatePacket)
+	netman.RegisterUDP(netman.Fire, handleFirePacket)
+	go netman.ListenUDP()
+	go netman.AcceptNewTCPConnections()
 
-	packetListener := netman.NewPacketListener(server)
-	packetListener.Register(netman.Hello, handleHelloPacket)
-	packetListener.Register(netman.PlayerUpdate, handlePlayerUpdatePacket)
-	packetListener.Register(netman.Bye, handleByePacket)
-	packetListener.Register(netman.Fire, handleFirePacket)
-	packetListener.Listen()
+	server.Update()
+
+	// TODO will never happen (for now at least - server.Update is infinite for loop)
+	netman.ShutDown()
 }

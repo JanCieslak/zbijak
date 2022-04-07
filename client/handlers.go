@@ -34,7 +34,7 @@ func handleServerUpdatePacket(_ netman.PacketKind, _ net.Addr, data interface{},
 	}
 }
 
-func handleByeAckPacket(_ netman.PacketKind, _ net.Addr, data interface{}, game interface{}) {
+func handleByeAckPacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, game interface{}) {
 	byeAckData := data.(netman.ByeAckPacketData)
 	gameData := game.(*Game)
 	fmt.Println("ClientId", byeAckData.ClientId)

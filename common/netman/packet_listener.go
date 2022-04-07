@@ -4,14 +4,19 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"sync"
 )
 
-type packetListenerCallback = func(kind PacketKind, addr net.Addr, data interface{}, customData interface{})
+type packetListenerUDPCallback = func(kind PacketKind, addr net.Addr, data interface{}, customData interface{})
+type packetListenerTCPCallback = func(kind PacketKind, tcpConn *net.TCPConn, data interface{}, customData interface{})
 
 type packetListener struct {
-	shouldListen *AtomicBool
-	callbacks    map[PacketKind]packetListenerCallback
-	customData   interface{}
+	shouldListen    *AtomicBool
+	udpCallbacks    map[PacketKind]packetListenerUDPCallback
+	tcpCallbacks    map[PacketKind]packetListenerTCPCallback
+	tcpClients      []*net.TCPConn
+	tcpClientsMutex sync.Mutex
+	customData      interface{}
 }
 
 func NewPacketListener(customData interface{}) packetListener {
@@ -19,45 +24,50 @@ func NewPacketListener(customData interface{}) packetListener {
 		shouldListen: &AtomicBool{
 			value: 1,
 		},
-		callbacks:  make(map[PacketKind]packetListenerCallback),
-		customData: customData,
+		udpCallbacks: make(map[PacketKind]packetListenerUDPCallback),
+		tcpCallbacks: make(map[PacketKind]packetListenerTCPCallback),
+		customData:   customData,
 	}
 }
 
-func (packetListener *packetListener) Register(kind PacketKind, callback packetListenerCallback) {
-	packetListener.callbacks[kind] = callback
+func (packetListener *packetListener) registerUDP(kind PacketKind, callback packetListenerUDPCallback) {
+	packetListener.udpCallbacks[kind] = callback
 }
 
-func (packetListener *packetListener) Listen() {
+func (packetListener *packetListener) registerTCP(kind PacketKind, callback packetListenerTCPCallback) {
+	packetListener.tcpCallbacks[kind] = callback
+}
+
+func (packetListener *packetListener) listenUDP() {
 	for packetListener.shouldListen.Get() {
-		buffer, addr := ReceiveBytesFromUnreliable()
+		buffer, addr := ReceiveBytesWithAddrUnreliable()
 		kind := packetKindFromBytes(buffer)
-		callback, ok := packetListener.callbacks[kind]
+		callback, ok := packetListener.udpCallbacks[kind]
 		if !ok {
 			log.Fatalf("Kind: %v not defined in callbacks\n", kind)
 		}
 
 		switch kind {
 		case Hello:
-			callCallback[HelloPacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[HelloPacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case Welcome:
-			callCallback[WelcomePacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[WelcomePacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case PlayerUpdate:
-			callCallback[PlayerUpdatePacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[PlayerUpdatePacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case ServerUpdate:
-			callCallback[ServerUpdatePacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[ServerUpdatePacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case Fire:
-			callCallback[FirePacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[FirePacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case Bye:
-			callCallback[ByePacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[ByePacketData](packetListener, addr, buffer, callback, kind)
 			break
 		case ByeAck:
-			callCallback[ByeAckPacketData](packetListener, addr, buffer, callback, kind)
+			callUDPCallback[ByeAckPacketData](packetListener, addr, buffer, callback, kind)
 			break
 		default:
 			log.Fatalln("Should define switch branch")
@@ -65,15 +75,74 @@ func (packetListener *packetListener) Listen() {
 	}
 }
 
-func (packetListener packetListener) ShutDown() {
+func (packetListener *packetListener) acceptNewTCPConnections() {
+	for {
+		conn, err := tcpListener.AcceptTCP()
+		if err != nil {
+			log.Fatalln("TCP accept:", err)
+		}
+
+		packetListener.tcpClientsMutex.Lock()
+		packetListener.tcpClients = append(packetListener.tcpClients, conn)
+		packetListener.tcpClientsMutex.Unlock()
+
+		go packetListener.listenTCP(conn)
+	}
+}
+
+func (packetListener *packetListener) listenTCP(conn *net.TCPConn) {
+	for packetListener.shouldListen.Get() {
+		buffer := ReceiveBytesReliable(conn)
+		kind := packetKindFromBytes(buffer)
+		callback, ok := packetListener.tcpCallbacks[kind]
+		if !ok {
+			log.Fatalf("Kind: %v not defined in callbacks\n", kind)
+		}
+
+		switch kind {
+		case Hello:
+			callTCPCallback[HelloPacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case Welcome:
+			callTCPCallback[WelcomePacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case PlayerUpdate:
+			callTCPCallback[PlayerUpdatePacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case ServerUpdate:
+			callTCPCallback[ServerUpdatePacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case Fire:
+			callTCPCallback[FirePacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case Bye:
+			callTCPCallback[ByePacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case ByeAck:
+			callTCPCallback[ByeAckPacketData](packetListener, conn, buffer, callback, kind)
+			break
+		default:
+			log.Fatalln("Should define switch branch")
+		}
+	}
+}
+
+func (packetListener packetListener) shutDown() {
 	packetListener.shouldListen.Set(false)
 }
 
-func callCallback[T PacketData](packetListener *packetListener, addr net.Addr, buffer []byte, callback packetListenerCallback, kind PacketKind) {
+func callUDPCallback[T PacketData](packetListener *packetListener, addr net.Addr, buffer []byte, callback packetListenerUDPCallback, kind PacketKind) {
 	var packet Packet[T]
 	unmarshalPacket(buffer, &packet)
 	packetData := packet.Data
 	callback(kind, addr, packetData, packetListener.customData)
+}
+
+func callTCPCallback[T PacketData](packetListener *packetListener, conn *net.TCPConn, buffer []byte, callback packetListenerTCPCallback, kind PacketKind) {
+	var packet Packet[T]
+	unmarshalPacket(buffer, &packet)
+	packetData := packet.Data
+	callback(kind, conn, packetData, packetListener.customData)
 }
 
 func unmarshalPacket[T PacketData](buffer []byte, packet *Packet[T]) {

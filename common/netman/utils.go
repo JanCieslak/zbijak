@@ -10,6 +10,12 @@ type AtomicBool struct {
 	value int32
 }
 
+func NewAtomicBool(value bool) *AtomicBool {
+	atomicBool := AtomicBool{}
+	atomicBool.Set(value)
+	return &atomicBool
+}
+
 func (b *AtomicBool) Set(value bool) {
 	var i int32 = 0
 	if value {

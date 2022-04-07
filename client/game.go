@@ -123,7 +123,7 @@ func (g *Game) InterpolateRemoteObjectsPositions() {
 func (g *Game) Draw(screen *ebiten.Image) {
 	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
 
-	g.DebugDraw(screen)
+	//g.DebugDraw(screen)
 
 	g.RemotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
