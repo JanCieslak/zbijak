@@ -83,11 +83,11 @@ func (s *Server) checkCollisions() {
 	s.balls.Range(func(key, value any) bool {
 		remoteBall := value.(*RemoteBall)
 
-		if remoteBall.pos.Y <= 0 || remoteBall.pos.Y+constants.BallRadius >= constants.ScreenHeight {
+		if remoteBall.pos.Y <= constants.BallRadius || remoteBall.pos.Y+constants.BallRadius >= constants.ScreenHeight {
 			remoteBall.vel.Y *= -1
 			remoteBall.team = constants.NoTeam
 		}
-		if remoteBall.pos.X <= 0 || remoteBall.pos.X+constants.BallRadius >= constants.ScreenWidth {
+		if remoteBall.pos.X <= constants.BallRadius || remoteBall.pos.X+constants.BallRadius >= constants.ScreenWidth {
 			remoteBall.vel.X *= -1
 			remoteBall.team = constants.NoTeam
 		}
@@ -99,7 +99,7 @@ func (s *Server) checkCollisions() {
 func (s *Server) moveBalls() {
 	s.balls.Range(func(key, value any) bool {
 		remoteBall := value.(*RemoteBall)
-		if remoteBall.ownerId == 255 {
+		if remoteBall.ownerId == constants.NoTeam {
 			remoteBall.pos.Add(remoteBall.vel.X, remoteBall.vel.Y)
 		}
 		return true

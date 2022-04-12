@@ -78,17 +78,17 @@ func (p *Player) Update() {
 	p.Pos.AddVec(p.Velocity)
 
 	// Wall collisions
-	if p.Pos.X-constants.PlayerRadius <= 0 {
-		p.Pos.X = constants.PlayerRadius
+	if p.Pos.X-constants.PlayerRadius <= constants.NoGoZonePadding {
+		p.Pos.X = constants.PlayerRadius + constants.NoGoZonePadding
 	}
-	if p.Pos.X+constants.PlayerRadius >= constants.ScreenWidth {
-		p.Pos.X = constants.ScreenWidth - constants.PlayerRadius
+	if p.Pos.X+constants.PlayerRadius >= constants.ScreenWidth-constants.NoGoZonePadding {
+		p.Pos.X = constants.ScreenWidth - constants.PlayerRadius - constants.NoGoZonePadding
 	}
-	if p.Pos.Y-constants.PlayerRadius <= 0 {
-		p.Pos.Y = constants.PlayerRadius
+	if p.Pos.Y-constants.PlayerRadius <= constants.NoGoZonePadding {
+		p.Pos.Y = constants.PlayerRadius + constants.NoGoZonePadding
 	}
-	if p.Pos.Y+constants.PlayerRadius >= constants.ScreenHeight {
-		p.Pos.Y = constants.ScreenHeight - constants.PlayerRadius
+	if p.Pos.Y+constants.PlayerRadius >= constants.ScreenHeight-constants.NoGoZonePadding {
+		p.Pos.Y = constants.ScreenHeight - constants.PlayerRadius - constants.NoGoZonePadding
 	}
 
 	// TODO ball wall conditions (now one can throw ball outside of the screen) ;/
@@ -96,5 +96,5 @@ func (p *Player) Update() {
 
 func (p *Player) Draw(screen *ebiten.Image) {
 	utils.DrawCircle(screen, p.Pos.X, p.Pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(p.Team))
-	utils.DrawText(screen, "jcs", p.Pos.X, p.Pos.Y) // TODO name
+	utils.DrawText(screen, "jcs", p.Pos.X, p.Pos.Y+constants.PlayerRadius*3/4) // TODO name
 }

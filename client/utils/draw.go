@@ -12,17 +12,17 @@ var (
 	circleOutlineImage = loadImage("resources/circle.png", 0.2)
 	circleImage        = loadImage("resources/filled_circle.png", 1.0)
 
-	OrangeTeamColor = color.RGBA{R: 235, G: 131, B: 52, A: 255}
-	BlueTeamColor   = color.RGBA{R: 52, G: 158, B: 235, A: 255}
+	TeamAColor = color.RGBA{R: 235, G: 131, B: 52, A: 255}
+	TeamBColor = color.RGBA{R: 52, G: 158, B: 235, A: 255}
 
 	face = inconsolata.Bold8x16
 )
 
 func GetTeamColor(team constants.Team) color.Color {
-	if team == constants.TeamOrange {
-		return OrangeTeamColor
-	} else if team == constants.TeamBlue {
-		return BlueTeamColor
+	if team == constants.TeamB {
+		return TeamAColor
+	} else if team == constants.TeamA {
+		return TeamBColor
 	}
 	return color.White
 }

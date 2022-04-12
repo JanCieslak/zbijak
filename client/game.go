@@ -86,7 +86,7 @@ func (g *Game) InterpolateRemoteObjectsPositions() {
 				if ok0 && ok1 {
 					newX := utils.Lerp(playerOne.Pos.X, playerTwo.Pos.X, interpolationFactor)
 					newY := utils.Lerp(playerOne.Pos.Y, playerTwo.Pos.Y, interpolationFactor)
-					newRotation := utils.Lerp(playerOne.Rotation, playerTwo.Rotation, interpolationFactor)
+					newRotation := utils.Slerp(playerOne.Rotation, playerTwo.Rotation, interpolationFactor)
 
 					remotePlayer.pos.Set(newX, newY)
 					remotePlayer.rotation = newRotation
@@ -123,14 +123,19 @@ func (g *Game) InterpolateRemoteObjectsPositions() {
 func (g *Game) Draw(screen *ebiten.Image) {
 	// TODO Draw based on state ? (trail when in dash, don't draw when dead state, when charging draw charge bar)
 
-	//g.DebugDraw(screen)
+	g.DebugDraw(screen)
+
+	DrawNoGoZone(screen)
+	DrawDivider(screen)
+	DrawTeamNames(screen)
+	DrawScore(screen)
 
 	g.RemotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
 		if clientId != g.Id {
 			utils.DrawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(remotePlayer.team))
-			utils.DrawText(screen, "jcs", remotePlayer.pos.X, remotePlayer.pos.Y)
+			utils.DrawText(screen, "jcs", remotePlayer.pos.X, remotePlayer.pos.Y+constants.PlayerRadius*3/4)
 		}
 		return true
 	})
@@ -158,6 +163,27 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	})
 
 	g.Player.Draw(screen)
+}
+
+func DrawNoGoZone(screen *ebiten.Image) {
+	ebitenutil.DrawLine(screen, constants.NoGoZonePadding, constants.NoGoZonePadding, constants.ScreenWidth-constants.NoGoZonePadding, constants.NoGoZonePadding, color.White)
+	ebitenutil.DrawLine(screen, constants.NoGoZonePadding, constants.ScreenHeight-constants.NoGoZonePadding, constants.ScreenWidth-constants.NoGoZonePadding, constants.ScreenHeight-constants.NoGoZonePadding, color.White)
+	ebitenutil.DrawLine(screen, constants.NoGoZonePadding, constants.NoGoZonePadding, constants.NoGoZonePadding, constants.ScreenHeight-constants.NoGoZonePadding, color.White)
+	ebitenutil.DrawLine(screen, constants.ScreenWidth-constants.NoGoZonePadding, constants.NoGoZonePadding, constants.ScreenWidth-constants.NoGoZonePadding, constants.ScreenHeight-constants.NoGoZonePadding, color.White)
+}
+
+func DrawDivider(screen *ebiten.Image) {
+	ebitenutil.DrawLine(screen, constants.ScreenWidth/2, 0, constants.ScreenWidth/2, constants.ScreenHeight, color.White)
+}
+
+func DrawTeamNames(screen *ebiten.Image) {
+	utils.DrawText(screen, "Team A", constants.ScreenWidth/4, constants.NoGoZonePadding)
+	utils.DrawText(screen, "Team B", constants.ScreenWidth*3/4, constants.NoGoZonePadding)
+}
+
+func DrawScore(screen *ebiten.Image) {
+	utils.DrawText(screen, "15", constants.ScreenWidth/2-20, constants.NoGoZonePadding)
+	utils.DrawText(screen, "19", constants.ScreenWidth/2+20, constants.NoGoZonePadding)
 }
 
 func (g *Game) DebugDraw(screen *ebiten.Image) {

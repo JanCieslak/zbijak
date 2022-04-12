@@ -33,7 +33,7 @@ func main() {
 	server := &Server{
 		players:      sync.Map{},
 		nextClientId: 0,
-		nextTeam:     constants.TeamOrange,
+		nextTeam:     constants.TeamB,
 		balls:        balls,
 	}
 

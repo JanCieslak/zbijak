@@ -20,10 +20,10 @@ func handleHelloPacket(_ netman.PacketKind, conn *net.TCPConn, _ interface{}, se
 
 	atomic.AddUint32(&serverData.nextClientId, 1)
 
-	if serverData.nextTeam == constants.TeamOrange {
-		serverData.nextTeam = constants.TeamBlue
+	if serverData.nextTeam == constants.TeamB {
+		serverData.nextTeam = constants.TeamA
 	} else {
-		serverData.nextTeam = constants.TeamOrange
+		serverData.nextTeam = constants.TeamB
 	}
 
 	// TODO Registering should be happening here ? (right now, it's in handlePlayerUpdatePacket)
@@ -44,7 +44,6 @@ func handlePlayerUpdatePacket(_ netman.PacketKind, addr net.Addr, data interface
 	})
 }
 
-// TODO receive Reliably and then Reliably broadcast message to all of the connected peers
 func handleByePacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, server interface{}) {
 	byePacketData := data.(netman.ByePacketData)
 	serverData := server.(*Server)

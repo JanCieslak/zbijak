@@ -6,17 +6,18 @@ const (
 	ScreenWidth         = 640
 	ScreenHeight        = 480
 	TickRate            = 144
-	InterpolationOffset = 100 * time.Millisecond
+	InterpolationOffset = 50 * time.Millisecond
 	PlayerRadius        = 16
 	BallRadius          = 8
 	BallOrbitRadius     = 40
 	TickTime            = time.Second / TickRate
+	NoGoZonePadding     = BallOrbitRadius + BallRadius
 )
 
 type Team uint8
 
 const (
-	TeamBlue Team = iota
-	TeamOrange
+	TeamA Team = iota
+	TeamB
 	NoTeam = 255
 )
