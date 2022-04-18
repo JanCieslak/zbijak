@@ -8,7 +8,7 @@ import (
 type NormalPlayerState struct{}
 
 func (s NormalPlayerState) Update(p *Player) {
-	if ebiten.IsKeyPressed(ebiten.KeyShiftLeft) {
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) {
 		p.PlayerState = ChargePlayerState{
 			startTime: time.Now(),
 		}

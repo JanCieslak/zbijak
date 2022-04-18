@@ -6,6 +6,7 @@
 - server commands - e.g. end warmup, restart game etc.
 - better serialization (right now it's json - it can be too much data to handle many players)
 - server deployment
+- charge / dash cooldown indicators
 
 # Fix
 - lagging ball players too (or just my pc :[)

@@ -10,6 +10,10 @@ import (
 	"sync/atomic"
 )
 
+const (
+	baseBallSpeed = 3
+)
+
 func handleHelloPacket(_ netman.PacketKind, conn *net.TCPConn, _ interface{}, server interface{}) {
 	serverData := server.(*Server)
 
@@ -74,7 +78,8 @@ func handleFirePacket(_ netman.PacketKind, _ net.Addr, data interface{}, server 
 
 			ball.vel = vec.NewVec2(math.Cos(remotePlayer.rotation), math.Sin(remotePlayer.rotation)).
 				Normalized().
-				Muled(3) // TODO Vector builder ? (overall, better vec struct - package ?)
+				Muled(baseBallSpeed). // TODO Vector builder ? (overall, better vec struct - package ?)
+				Muled(firePacketData.Multiplier)
 
 			ball.ownerId = constants.NoTeam
 		}

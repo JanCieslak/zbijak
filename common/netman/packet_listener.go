@@ -47,6 +47,7 @@ func (packetListener *packetListener) listenUDP() {
 			log.Fatalf("Kind: %v not defined in callbacks\n", kind)
 		}
 
+		// TODO Can it be removed ? is there any way for it to be just callUDPCallback(...)
 		switch kind {
 		case Hello:
 			callUDPCallback[HelloPacketData](packetListener, addr, buffer, callback, kind)

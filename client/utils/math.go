@@ -1,6 +1,9 @@
 package utils
 
-import "math"
+import (
+	"constraints"
+	"math"
+)
 
 func MapValue(x, inMin, inMax, outMin, outMax float64) float64 {
 	return (x-inMin)*(outMax-outMin)/(inMax-inMin) + outMin
@@ -16,4 +19,11 @@ func Slerp(start, end, p float64) float64 {
 		return end
 	}
 	return start + (end-start)*p
+}
+
+func Min[T constraints.Ordered](a, b T) T {
+	if a < b {
+		return a
+	}
+	return b
 }

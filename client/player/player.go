@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	NormalSpeed = 2.5
+	NormalSpeed = 2.5 // TODO When ball has speed 3 on server and here we set 2.5 for some reason player can throw and run to the ball (there must be some lag that is causing this behaviour - to analyze)
 
-	FullChargeSpeed    = 0.2 * NormalSpeed
-	FullChargeDuration = time.Second
+	FullChargeSpeed      = 0.2 * NormalSpeed
+	FullChargeDuration   = 4 * time.Second
+	MinChargeMultiplier  = 1.0
+	FullChargeMultiplier = 6.0
 
 	DashSpeed    = 2 * NormalSpeed
 	DashDuration = 250 * time.Millisecond

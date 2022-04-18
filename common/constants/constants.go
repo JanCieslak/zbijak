@@ -3,8 +3,8 @@ package constants
 import "time"
 
 const (
-	ScreenWidth         = 640
-	ScreenHeight        = 480
+	ScreenWidth         = 1280
+	ScreenHeight        = 768
 	TickRate            = 144
 	InterpolationOffset = 50 * time.Millisecond
 	PlayerRadius        = 16
