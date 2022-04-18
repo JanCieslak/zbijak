@@ -4,6 +4,7 @@ import (
 	"github.com/JanCieslak/Zbijak/client/player"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/netman"
+	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"log"
 	"sync"
@@ -12,6 +13,10 @@ import (
 
 func main() {
 	log.SetPrefix("Client - ")
+
+	netman.InitializeClientSockets("127.0.0.1:8083", "127.0.0.1:8084")
+
+	clientId, team, initPos := hello()
 
 	// TODO Uncomment when releasing
 	//name, ok := inputbox.InputBox("Enter your name", "Type 3 char name", "abc")
@@ -22,27 +27,19 @@ func main() {
 	//	log.Fatalln("Name should be constructed from 3 characters")
 	//}
 	name := "jcs"
-	g := &Game{
-		Id:               255,
-		Team:             constants.NoTeam,
+	game := &Game{
+		Id:               clientId,
+		Team:             team,
 		Name:             name,
-		Player:           player.NewPlayer(255, constants.NoTeam, 250, 250), // TODO Get position from the server
+		Player:           player.NewPlayer(clientId, team, initPos.X, initPos.Y),
 		RemotePlayers:    sync.Map{},
 		RemoteBalls:      sync.Map{},
 		LastServerUpdate: time.Now(),
 	}
 
-	netman.InitializeClientSockets("127.0.0.1:8083", "127.0.0.1:8084", g)
+	netman.InitializeClientListener(game)
 	netman.RegisterUDP(netman.ServerUpdate, handleServerUpdatePacket)
 	netman.RegisterTCP(netman.ByeAck, handleByeAckPacket)
-
-	// TODO Use reliable connection
-	clientId, team := hello()
-
-	g.Id = clientId
-	g.Player.Id = clientId
-	g.Team = team
-	g.Player.Team = team
 
 	log.Println("Client id:", clientId)
 
@@ -55,17 +52,17 @@ func main() {
 	go netman.ListenTCP()
 	go netman.ListenUDP()
 
-	if err := ebiten.RunGame(g); err != nil {
+	if err := ebiten.RunGame(game); err != nil {
 		log.Fatalln(err)
 	}
 
 	netman.ShutDown()
 	time.Sleep(time.Millisecond * 250)
 	// TODO Use reliable connection
-	bye(g)
+	bye(game)
 }
 
-func hello() (uint8, constants.Team) {
+func hello() (uint8, constants.Team, vec.Vec2) {
 	log.Println("Sending Hello packet")
 	netman.SendReliable(netman.Hello, netman.HelloPacketData{})
 
@@ -73,7 +70,7 @@ func hello() (uint8, constants.Team) {
 	netman.ReceiveReliable(&welcomePacket)
 	welcomePacketData := welcomePacket.Data
 
-	return welcomePacketData.ClientId, welcomePacketData.Team
+	return welcomePacketData.ClientId, welcomePacketData.Team, welcomePacketData.InitPos
 }
 
 func bye(game *Game) {

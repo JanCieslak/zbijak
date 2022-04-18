@@ -23,6 +23,7 @@ type HelloPacketData struct{}
 type WelcomePacketData struct {
 	ClientId uint8
 	Team     constants.Team
+	InitPos  vec.Vec2
 }
 
 // TODO This should be only user input (user shouldn't be able to manipulate data that is sent to sever)

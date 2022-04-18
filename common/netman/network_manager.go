@@ -43,7 +43,7 @@ func InitializeServerSockets(udpAddr string, tcpAddr string, listenerCustomData 
 }
 
 // TODO should be initialized on client / server side
-func InitializeClientSockets(udpAddr string, tcpAddr string, listenerCustomData interface{}) {
+func InitializeClientSockets(udpAddr string, tcpAddr string) {
 	udpClientAddr, err := net.ResolveUDPAddr("udp", udpAddr)
 	if err != nil {
 		log.Fatalln("Udp address:", err)
@@ -63,7 +63,9 @@ func InitializeClientSockets(udpAddr string, tcpAddr string, listenerCustomData 
 	if err != nil {
 		log.Fatalln("TCP dial creation:", err)
 	}
+}
 
+func InitializeClientListener(listenerCustomData interface{}) {
 	listener = NewPacketListener(listenerCustomData)
 }
 

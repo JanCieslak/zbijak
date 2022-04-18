@@ -6,20 +6,45 @@ import (
 	"github.com/JanCieslak/zbijak/common/vec"
 	"log"
 	"math"
+	"math/rand"
 	"net"
 	"sync/atomic"
+	"time"
 )
 
 const (
 	baseBallSpeed = 3
 )
 
+var (
+	teamASpawnPoints = [3]vec.Vec2{
+		vec.NewVec2(constants.ScreenWidth/4, constants.ScreenHeight*2/5),
+		vec.NewVec2(constants.ScreenWidth/4, constants.ScreenHeight*3/5),
+		vec.NewVec2(constants.ScreenWidth/4, constants.ScreenHeight*4/5),
+	}
+	teamBSpawnPoints = [3]vec.Vec2{
+		vec.NewVec2(constants.ScreenWidth*3/4, constants.ScreenHeight*2/5),
+		vec.NewVec2(constants.ScreenWidth*3/4, constants.ScreenHeight*3/5),
+		vec.NewVec2(constants.ScreenWidth*3/4, constants.ScreenHeight*4/5),
+	}
+)
+
 func handleHelloPacket(_ netman.PacketKind, conn *net.TCPConn, _ interface{}, server interface{}) {
 	serverData := server.(*Server)
+
+	var spawnPoint vec.Vec2
+
+	rand.Seed(time.Now().UnixNano())
+	if serverData.nextTeam == constants.TeamA {
+		spawnPoint = teamASpawnPoints[rand.Intn(len(teamASpawnPoints))]
+	} else {
+		spawnPoint = teamBSpawnPoints[rand.Intn(len(teamBSpawnPoints))]
+	}
 
 	netman.SendReliableWithConn(conn, netman.Welcome, netman.WelcomePacketData{
 		ClientId: uint8(serverData.nextClientId),
 		Team:     serverData.nextTeam,
+		InitPos:  spawnPoint,
 	})
 
 	atomic.AddUint32(&serverData.nextClientId, 1)

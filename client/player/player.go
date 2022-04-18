@@ -13,7 +13,7 @@ const (
 	NormalSpeed = 2.5 // TODO When ball has speed 3 on server and here we set 2.5 for some reason player can throw and run to the ball (there must be some lag that is causing this behaviour - to analyze)
 
 	FullChargeSpeed      = 0.2 * NormalSpeed
-	FullChargeDuration   = 4 * time.Second
+	FullChargeDuration   = 2 * time.Second
 	MinChargeMultiplier  = 1.0
 	FullChargeMultiplier = 6.0
 
@@ -45,7 +45,7 @@ func NewPlayer(id uint8, team constants.Team, x, y float64) *Player {
 	}
 }
 
-func (p *Player) Update() {
+func (p *Player) Update() { // TODO Most of the things here should be moved to server side
 	moveVector := vec.Vec2{}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
@@ -79,12 +79,21 @@ func (p *Player) Update() {
 
 	p.Pos.AddVec(p.Velocity)
 
-	// Wall collisions
-	if p.Pos.X-constants.PlayerRadius <= constants.NoGoZonePadding {
-		p.Pos.X = constants.PlayerRadius + constants.NoGoZonePadding
-	}
-	if p.Pos.X+constants.PlayerRadius >= constants.ScreenWidth-constants.NoGoZonePadding {
-		p.Pos.X = constants.ScreenWidth - constants.PlayerRadius - constants.NoGoZonePadding
+	// Court collisions
+	if p.Team == constants.TeamA {
+		if p.Pos.X-constants.PlayerRadius <= constants.NoGoZonePadding {
+			p.Pos.X = constants.PlayerRadius + constants.NoGoZonePadding
+		}
+		if p.Pos.X+constants.PlayerRadius >= constants.ScreenWidth/2 {
+			p.Pos.X = constants.ScreenWidth/2 - constants.PlayerRadius
+		}
+	} else {
+		if p.Pos.X-constants.PlayerRadius <= constants.ScreenWidth/2 {
+			p.Pos.X = constants.ScreenWidth/2 + constants.PlayerRadius
+		}
+		if p.Pos.X+constants.PlayerRadius >= constants.ScreenWidth-constants.NoGoZonePadding {
+			p.Pos.X = constants.ScreenWidth - constants.PlayerRadius - constants.NoGoZonePadding
+		}
 	}
 	if p.Pos.Y-constants.PlayerRadius <= constants.NoGoZonePadding {
 		p.Pos.Y = constants.PlayerRadius + constants.NoGoZonePadding
