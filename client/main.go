@@ -4,7 +4,6 @@ import (
 	"github.com/JanCieslak/Zbijak/client/player"
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/netman"
-	"github.com/JanCieslak/zbijak/common/vec"
 	"github.com/hajimehoshi/ebiten/v2"
 	"log"
 	"sync"
@@ -16,7 +15,8 @@ func main() {
 
 	netman.InitializeClientSockets("127.0.0.1:8083", "127.0.0.1:8084")
 
-	clientId, team, initPos := hello()
+	welcomeData := hello()
+	log.Println("Client id:", welcomeData.ClientId)
 
 	// TODO Uncomment when releasing
 	//name, ok := inputbox.InputBox("Enter your name", "Type 3 char name", "abc")
@@ -28,10 +28,10 @@ func main() {
 	//}
 	name := "jcs"
 	game := &Game{
-		Id:               clientId,
-		Team:             team,
+		Id:               welcomeData.ClientId,
+		Team:             welcomeData.Team,
 		Name:             name,
-		Player:           player.NewPlayer(clientId, team, initPos.X, initPos.Y),
+		Player:           player.NewPlayer(welcomeData.ClientId, welcomeData.Team, welcomeData.InitPos.X, welcomeData.InitPos.Y),
 		RemotePlayers:    sync.Map{},
 		RemoteBalls:      sync.Map{},
 		LastServerUpdate: time.Now(),
@@ -39,9 +39,8 @@ func main() {
 
 	netman.InitializeClientListener(game)
 	netman.RegisterUDP(netman.ServerUpdate, handleServerUpdatePacket)
+	netman.RegisterTCP(netman.HitConfirm, handleHitConfirmPacket)
 	netman.RegisterTCP(netman.ByeAck, handleByeAckPacket)
-
-	log.Println("Client id:", clientId)
 
 	ebiten.SetWindowTitle("Zbijak")
 	ebiten.SetWindowResizable(true)
@@ -62,15 +61,13 @@ func main() {
 	bye(game)
 }
 
-func hello() (uint8, constants.Team, vec.Vec2) {
+func hello() netman.WelcomePacketData {
 	log.Println("Sending Hello packet")
 	netman.SendReliable(netman.Hello, netman.HelloPacketData{})
 
 	var welcomePacket netman.Packet[netman.WelcomePacketData]
 	netman.ReceiveReliable(&welcomePacket)
-	welcomePacketData := welcomePacket.Data
-
-	return welcomePacketData.ClientId, welcomePacketData.Team, welcomePacketData.InitPos
+	return welcomePacket.Data
 }
 
 func bye(game *Game) {

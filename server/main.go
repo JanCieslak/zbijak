@@ -19,13 +19,15 @@ func main() {
 	// TODO Testing balls
 	balls.Store(0, &RemoteBall{
 		id:      0,
+		team:    constants.NoTeam,
 		pos:     vec.NewVec2(300, 300),
 		vel:     vec.NewVec2(0, 0),
-		ownerId: 0,
+		ownerId: constants.NoTeam,
 	})
 	balls.Store(1, &RemoteBall{
 		id:      1,
-		pos:     vec.NewVec2(600, 300),
+		team:    constants.NoTeam,
+		pos:     vec.NewVec2(800, 300),
 		vel:     vec.NewVec2(0, 0),
 		ownerId: constants.NoTeam,
 	})

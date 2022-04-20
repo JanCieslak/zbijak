@@ -64,6 +64,9 @@ func (packetListener *packetListener) listenUDP() {
 		case Fire:
 			callUDPCallback[FirePacketData](packetListener, addr, buffer, callback, kind)
 			break
+		case HitConfirm:
+			callUDPCallback[HitConfirmData](packetListener, addr, buffer, callback, kind)
+			break
 		case Bye:
 			callUDPCallback[ByePacketData](packetListener, addr, buffer, callback, kind)
 			break
@@ -115,6 +118,9 @@ func (packetListener *packetListener) listenTCP(conn *net.TCPConn) {
 			break
 		case Fire:
 			callTCPCallback[FirePacketData](packetListener, conn, buffer, callback, kind)
+			break
+		case HitConfirm:
+			callTCPCallback[HitConfirmData](packetListener, conn, buffer, callback, kind)
 			break
 		case Bye:
 			callTCPCallback[ByePacketData](packetListener, conn, buffer, callback, kind)

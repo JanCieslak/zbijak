@@ -14,6 +14,7 @@ const (
 	PlayerUpdate
 	ServerUpdate
 	Fire
+	HitConfirm
 	Bye
 	ByeAck
 )
@@ -62,6 +63,10 @@ type FirePacketData struct { // TODO should be deleted when using only player in
 	Multiplier float64 // TODO This should be calculated from input updates
 }
 
+type HitConfirmData struct {
+	ClientId uint8
+}
+
 type ByePacketData struct {
 	ClientId uint8 // TODO Should be needed
 }
@@ -76,6 +81,7 @@ type PacketData interface {
 		PlayerUpdatePacketData |
 		ServerUpdatePacketData |
 		FirePacketData |
+		HitConfirmData |
 		ByePacketData |
 		ByeAckPacketData
 }

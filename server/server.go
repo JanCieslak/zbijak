@@ -4,6 +4,7 @@ import (
 	"github.com/JanCieslak/zbijak/common/constants"
 	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/JanCieslak/zbijak/common/vec"
+	"log"
 	"net"
 	"sync"
 	"time"
@@ -36,6 +37,9 @@ type Server struct {
 }
 
 func (s *Server) Update() {
+	lastUpdateTime := time.Now()
+	tick := 0
+
 	for {
 		start := time.Now()
 
@@ -46,33 +50,43 @@ func (s *Server) Update() {
 		if time.Since(start) < constants.TickTime {
 			time.Sleep(constants.TickTime - time.Since(start))
 		}
+
+		tick++
+		if time.Since(lastUpdateTime) > time.Second {
+			lastUpdateTime = time.Now()
+			log.Printf("[%v] - Ticks: %d", lastUpdateTime, tick)
+			tick = 0
+		}
 	}
 }
 
 func (s *Server) checkCollisions() {
+	// Player collisions
 	s.players.Range(func(key, value any) bool {
 		remotePlayer := value.(*RemotePlayer)
 
 		// TODO There's a bug where you can pick up a ball that somebody is holding
 
-		// Picking up balls
 		s.balls.Range(func(key, value any) bool {
 			ball := value.(*RemoteBall)
+
+			// Player - ball collisions
 			if remotePlayer.pos.IsWithinRadius(ball.pos, 25) { // TODO Hardcoded
-				isOwned := false
-				s.balls.Range(func(key, value any) bool {
-					innerBall := value.(*RemoteBall)
-					if remotePlayer.clientId == innerBall.ownerId {
-						isOwned = true
-						return false
-					}
-					return true
-				})
-				if !isOwned {
+				if ball.team == constants.NoTeam {
+					log.Println("Pick up")
 					ball.ownerId = remotePlayer.clientId
 					ball.team = remotePlayer.team
+				} else if ball.team != remotePlayer.team {
+					log.Println("Hit")
+					netman.BroadcastReliable(netman.HitConfirm, netman.HitConfirmData{
+						ClientId: remotePlayer.clientId,
+					})
+
+					ball.team = constants.NoTeam
+					ball.ownerId = constants.NoTeam
 				}
 			}
+
 			return true
 		})
 

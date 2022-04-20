@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/JanCieslak/zbijak/common/netman"
+	"log"
 	"net"
 )
 
@@ -32,6 +33,14 @@ func handleServerUpdatePacket(_ netman.PacketKind, _ net.Addr, data interface{},
 			})
 		}
 	}
+}
+
+func handleHitConfirmPacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, game interface{}) {
+	hitConfirmData := data.(netman.HitConfirmData)
+	//gameData := game.(*Game)
+
+	log.Printf("Player %d hit", hitConfirmData.ClientId)
+	// TODO Handle hit
 }
 
 func handleByeAckPacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, game interface{}) {
