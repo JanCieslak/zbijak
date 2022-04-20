@@ -18,6 +18,7 @@ type RemotePlayer struct {
 	pos      vec.Vec2
 	rotation float64
 	inDash   bool
+	alive    bool
 }
 
 type RemoteBall struct {
@@ -62,27 +63,22 @@ func (s *Server) Update() {
 }
 
 func (s *Server) checkCollisions() {
-	// Player collisions
-	s.players.Range(func(key, value any) bool {
-		remotePlayer := value.(*RemotePlayer)
+	s.balls.Range(func(key, value any) bool {
+		ball := value.(*RemoteBall)
 
 		// TODO There's a bug where you can pick up a ball that somebody is holding
-
-		s.balls.Range(func(key, value any) bool {
-			ball := value.(*RemoteBall)
+		s.players.Range(func(key, value any) bool {
+			remotePlayer := value.(*RemotePlayer)
 
 			// Player - ball collisions
-			if remotePlayer.pos.IsWithinRadius(ball.pos, 25) { // TODO Hardcoded
+			if remotePlayer.alive && remotePlayer.pos.IsWithinRadius(ball.pos, 25) { // TODO Hardcoded
 				if ball.team == constants.NoTeam {
-					log.Println("Pick up")
+					// Pick up the ball
 					ball.ownerId = remotePlayer.clientId
 					ball.team = remotePlayer.team
 				} else if ball.team != remotePlayer.team {
-					log.Println("Hit")
-					netman.BroadcastReliable(netman.HitConfirm, netman.HitConfirmData{
-						ClientId: remotePlayer.clientId,
-					})
-
+					// Someone got hit
+					remotePlayer.alive = false
 					ball.team = constants.NoTeam
 					ball.ownerId = constants.NoTeam
 				}
@@ -134,6 +130,7 @@ func (s *Server) sendServerUpdate() {
 			Pos:      player.pos,
 			Rotation: player.rotation,
 			InDash:   player.inDash,
+			Alive:    player.alive,
 		}
 
 		return true

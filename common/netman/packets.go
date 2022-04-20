@@ -14,7 +14,6 @@ const (
 	PlayerUpdate
 	ServerUpdate
 	Fire
-	HitConfirm
 	Bye
 	ByeAck
 )
@@ -44,6 +43,7 @@ type PlayerData struct {
 	Pos      vec.Vec2
 	Rotation float64
 	InDash   bool // TODO Is it needed ?
+	Alive    bool
 }
 
 type BallData struct {
@@ -63,10 +63,6 @@ type FirePacketData struct { // TODO should be deleted when using only player in
 	Multiplier float64 // TODO This should be calculated from input updates
 }
 
-type HitConfirmData struct {
-	ClientId uint8
-}
-
 type ByePacketData struct {
 	ClientId uint8 // TODO Should be needed
 }
@@ -81,7 +77,6 @@ type PacketData interface {
 		PlayerUpdatePacketData |
 		ServerUpdatePacketData |
 		FirePacketData |
-		HitConfirmData |
 		ByePacketData |
 		ByeAckPacketData
 }

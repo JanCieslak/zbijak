@@ -1,7 +1,7 @@
 # TODO
 
 - server deployment (vm)
-- dead player state (player handlers)
+- server crashing when player leaving
 - better serialization (right now it's json - it can be too much data to handle many players)
 - score (create score on the server side, bump score when player - ball collision happens - broadcast reliable message
   when score changes (or use already existing HitConfirmPacket))

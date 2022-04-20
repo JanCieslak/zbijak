@@ -30,17 +30,24 @@ func handleServerUpdatePacket(_ netman.PacketKind, _ net.Addr, data interface{},
 				name:     p.Name,
 				rotation: p.Rotation,
 				inDash:   p.InDash,
+				alive:    p.Alive,
 			})
+
+			// Meh
+			if !p.Alive && gameData.Player.Alive {
+				if p.ClientId == gameData.Id {
+					gameData.Player.Die()
+				} else {
+					value, ok := gameData.RemotePlayers.Load(p.ClientId)
+					if !ok {
+						log.Fatalln("Couldn't find remote player", p.ClientId)
+					}
+					remotePlayer := value.(*RemotePlayer)
+					remotePlayer.alive = false
+				}
+			}
 		}
 	}
-}
-
-func handleHitConfirmPacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, game interface{}) {
-	hitConfirmData := data.(netman.HitConfirmData)
-	//gameData := game.(*Game)
-
-	log.Printf("Player %d hit", hitConfirmData.ClientId)
-	// TODO Handle hit
 }
 
 func handleByeAckPacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, game interface{}) {

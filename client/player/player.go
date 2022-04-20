@@ -30,6 +30,7 @@ type Player struct {
 	MovementState State
 	PlayerState   State
 	Rotation      float64
+	Alive         bool
 }
 
 func NewPlayer(id uint8, team constants.Team, x, y float64) *Player {
@@ -42,6 +43,7 @@ func NewPlayer(id uint8, team constants.Team, x, y float64) *Player {
 			lastDashTime: time.Now().Add(-DashCooldown),
 		},
 		PlayerState: NormalPlayerState{},
+		Alive:       true,
 	}
 }
 
@@ -106,6 +108,14 @@ func (p *Player) Update() { // TODO Most of the things here should be moved to s
 }
 
 func (p *Player) Draw(screen *ebiten.Image) {
-	utils.DrawCircle(screen, p.Pos.X, p.Pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(p.Team))
-	utils.DrawText(screen, "jcs", p.Pos.X, p.Pos.Y+constants.PlayerRadius*3/4) // TODO name
+	if p.Alive {
+		utils.DrawCircle(screen, p.Pos.X, p.Pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(p.Team))
+		utils.DrawText(screen, "jcs", p.Pos.X, p.Pos.Y+constants.PlayerRadius*3/4) // TODO name
+	}
+}
+
+func (p *Player) Die() {
+	p.Alive = false
+	p.PlayerState = DeadPlayerState{}
+	p.MovementState = StopMovementState{}
 }

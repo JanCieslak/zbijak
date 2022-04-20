@@ -39,7 +39,6 @@ func main() {
 
 	netman.InitializeClientListener(game)
 	netman.RegisterUDP(netman.ServerUpdate, handleServerUpdatePacket)
-	netman.RegisterTCP(netman.HitConfirm, handleHitConfirmPacket)
 	netman.RegisterTCP(netman.ByeAck, handleByeAckPacket)
 
 	ebiten.SetWindowTitle("Zbijak")

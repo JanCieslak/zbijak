@@ -41,6 +41,8 @@ func handleHelloPacket(_ netman.PacketKind, conn *net.TCPConn, _ interface{}, se
 		spawnPoint = teamBSpawnPoints[rand.Intn(len(teamBSpawnPoints))]
 	}
 
+	// TODO Registering should be happening here ? (right now, it's in handlePlayerUpdatePacket)
+
 	netman.SendReliableWithConn(conn, netman.Welcome, netman.WelcomePacketData{
 		ClientId: uint8(serverData.nextClientId),
 		Team:     serverData.nextTeam,
@@ -54,15 +56,14 @@ func handleHelloPacket(_ netman.PacketKind, conn *net.TCPConn, _ interface{}, se
 	} else {
 		serverData.nextTeam = constants.TeamB
 	}
-
-	// TODO Registering should be happening here ? (right now, it's in handlePlayerUpdatePacket)
 }
 
 func handlePlayerUpdatePacket(_ netman.PacketKind, addr net.Addr, data interface{}, server interface{}) {
 	playerUpdatePacketData := data.(netman.PlayerUpdatePacketData)
 	serverData := server.(*Server)
 
-	serverData.players.Store(playerUpdatePacketData.ClientId, &RemotePlayer{
+	// TODO Register at hello level - then we can only update pod and rotation, which later should be calculated on the server side
+	value, loaded := serverData.players.LoadOrStore(playerUpdatePacketData.ClientId, &RemotePlayer{
 		clientId: playerUpdatePacketData.ClientId,
 		team:     playerUpdatePacketData.Team,
 		name:     playerUpdatePacketData.Name,
@@ -70,7 +71,15 @@ func handlePlayerUpdatePacket(_ netman.PacketKind, addr net.Addr, data interface
 		pos:      playerUpdatePacketData.Pos,
 		rotation: playerUpdatePacketData.Rotation,
 		inDash:   playerUpdatePacketData.InDash,
+		alive:    true,
 	})
+
+	if loaded {
+		player := value.(*RemotePlayer)
+		player.pos = playerUpdatePacketData.Pos
+		player.rotation = playerUpdatePacketData.Rotation
+		player.inDash = playerUpdatePacketData.InDash
+	}
 }
 
 func handleByePacket(_ netman.PacketKind, _ *net.TCPConn, data interface{}, server interface{}) {

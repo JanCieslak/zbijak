@@ -22,6 +22,7 @@ type RemotePlayer struct {
 	name     string
 	rotation float64
 	inDash   bool
+	alive    bool
 }
 
 type RemoteBall struct {
@@ -133,7 +134,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.RemotePlayers.Range(func(key, value any) bool {
 		clientId := key.(uint8)
 		remotePlayer := value.(*RemotePlayer)
-		if clientId != g.Id {
+		if clientId != g.Id && remotePlayer.alive {
 			utils.DrawCircle(screen, remotePlayer.pos.X, remotePlayer.pos.Y, constants.PlayerRadius, 1, utils.GetTeamColor(remotePlayer.team))
 			utils.DrawText(screen, "jcs", remotePlayer.pos.X, remotePlayer.pos.Y+constants.PlayerRadius*3/4)
 		}
