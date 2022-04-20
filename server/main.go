@@ -5,7 +5,10 @@ import (
 	"github.com/JanCieslak/zbijak/common/netman"
 	"github.com/JanCieslak/zbijak/common/vec"
 	"log"
+	"os"
+	"runtime/pprof"
 	"sync"
+	"time"
 )
 
 func main() {
@@ -37,7 +40,10 @@ func main() {
 		nextClientId: 0,
 		nextTeam:     constants.TeamB,
 		balls:        balls,
+		shouldRun:    netman.NewAtomicBool(true),
 	}
+
+	//go profile(server)
 
 	netman.InitializeServerSockets(":8083", ":8084", server)
 	netman.RegisterTCP(netman.Hello, handleHelloPacket)
@@ -47,8 +53,39 @@ func main() {
 	go netman.ListenUDP()
 	go netman.AcceptNewTCPConnections()
 
+	//go cmd(server)
+
 	server.Update()
 
 	// TODO will never happen (for now at least - server.Update is infinite for loop)
 	netman.ShutDown()
 }
+
+func profile(s *Server) {
+	f, err := os.Create("profile.pb.gz")
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = pprof.StartCPUProfile(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+	time.Sleep(15 * time.Second)
+	s.shouldRun.Set(false)
+	pprof.StopCPUProfile()
+}
+
+//func cmd(s *Server) {
+//	reader := bufio.NewReader(os.Stdin)
+//
+//	for {
+//		fmt.Print("-> ")
+//		text, _ := reader.ReadString('\n')
+//		// convert CRLF to LF
+//		text = strings.Replace(text, "\n", "", -1)
+//
+//		if strings.Compare("exit", text) == 0 {
+//			s.shouldRun.Set(false)
+//		}
+//	}
+//}

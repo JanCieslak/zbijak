@@ -34,13 +34,14 @@ type Server struct {
 	nextTeam     constants.Team
 	conn         *net.UDPConn
 	balls        sync.Map
+	shouldRun    *netman.AtomicBool
 }
 
 func (s *Server) Update() {
 	lastUpdateTime := time.Now()
 	tick := 0
 
-	for {
+	for s.shouldRun.Get() {
 		start := time.Now()
 
 		s.checkCollisions()

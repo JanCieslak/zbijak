@@ -45,7 +45,7 @@ func NewPlayer(id uint8, team constants.Team, x, y float64) *Player {
 	}
 }
 
-func (p *Player) Update() { // TODO Most of the things here should be moved to server side
+func (p *Player) Update() { // TODO Most of the things here should be moved to server side + issue (movement based on fps, pretty bad)
 	moveVector := vec.Vec2{}
 
 	if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) || ebiten.IsKeyPressed(ebiten.KeyA) {
